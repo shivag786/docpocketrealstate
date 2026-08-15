@@ -1,0 +1,213 @@
+// Bootstrap 5 theme for the Real Estate MLM back office.
+// docs/04_UI_UX_SPECIFICATION.md: "Professional, fast and low-confusion Admin panel."
+
+// 1. Theme overrides must come before Bootstrap so its maps pick them up.
+$primary: #1b4d8f;
+$secondary: #5a6b7f;
+$success: #1c7c4a;
+$info: #0d7ea8;
+$warning: #b8860b;
+$danger: #b02a37;
+
+$font-family-sans-serif: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+$font-size-base: 0.9375rem;
+$border-radius: 0.375rem;
+$body-bg: #f4f6f9;
+$body-color: #23303f;
+
+$enable-negative-margins: true;
+
+// 2. Bootstrap itself.
+@import "bootstrap/scss/bootstrap";
+
+// 3. Bootstrap Icons.
+$bootstrap-icons-font-dir: "bootstrap-icons/font/fonts";
+@import "bootstrap-icons/font/bootstrap-icons";
+
+// 4. Application shell.
+:root {
+  --app-sidebar-width: 250px;
+  --app-topbar-height: 56px;
+  --app-sidebar-bg: #142a45;
+  --app-sidebar-hover: #1e3d61;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  font-size: $font-size-base;
+}
+
+// --- Layout ------------------------------------------------------------
+.app-topbar {
+  height: var(--app-topbar-height);
+  background: #fff;
+  border-bottom: 1px solid $gray-300;
+  position: sticky;
+  top: 0;
+  z-index: $zindex-sticky;
+}
+
+.app-sidebar {
+  width: var(--app-sidebar-width);
+  background: var(--app-sidebar-bg);
+  color: rgba(255, 255, 255, 0.75);
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: $zindex-fixed;
+  overflow-y: auto;
+  transition: transform 0.2s ease-in-out;
+
+  .app-brand {
+    height: var(--app-topbar-height);
+    display: flex;
+    align-items: center;
+    padding: 0 1rem;
+    color: #fff;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    text-decoration: none;
+  }
+
+  .nav-link {
+    color: rgba(255, 255, 255, 0.75);
+    padding: 0.55rem 1rem;
+    border-radius: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    font-size: 0.9rem;
+
+    i {
+      width: 1.1rem;
+      text-align: center;
+      font-size: 1rem;
+    }
+
+    &:hover,
+    &:focus {
+      color: #fff;
+      background: var(--app-sidebar-hover);
+    }
+
+    &.active {
+      color: #fff;
+      background: $primary;
+      font-weight: 500;
+      box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.85);
+    }
+
+    &.disabled {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+  }
+
+  .nav-section {
+    padding: 1rem 1rem 0.35rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.4);
+  }
+}
+
+.app-content {
+  margin-left: var(--app-sidebar-width);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-main {
+  flex: 1;
+  padding: 1.25rem;
+}
+
+// Off-canvas sidebar below the lg breakpoint.
+@include media-breakpoint-down(lg) {
+  .app-sidebar {
+    transform: translateX(-100%);
+
+    &.is-open {
+      transform: translateX(0);
+    }
+  }
+
+  .app-content {
+    margin-left: 0;
+  }
+}
+
+.app-sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: $zindex-fixed - 1;
+}
+
+// --- Auth screen -------------------------------------------------------
+.auth-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: linear-gradient(160deg, #142a45 0%, #1b4d8f 100%);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+}
+
+// --- Utilities ---------------------------------------------------------
+.card {
+  border: 1px solid $gray-200;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.stat-card {
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .stat-label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: $gray-600;
+  }
+}
+
+// Loading state for AJAX-driven regions. Never freeze the whole page —
+// docs/04_UI_UX_SPECIFICATION.md.
+.is-loading {
+  position: relative;
+  pointer-events: none;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.6);
+    z-index: 5;
+  }
+}
+
+.table > :not(caption) > * > * {
+  padding: 0.6rem 0.75rem;
+}
+
+.required-mark::after {
+  content: " *";
+  color: $danger;
+}
