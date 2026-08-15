@@ -108,14 +108,64 @@ class MoneyTest extends TestCase
         Money::multiply('not-a-number', '40');
     }
 
-    #[Test]
-    public function division_is_deliberately_absent(): void
+    /**
+     * @return array<int, array{string, string, string}>
+     */
+    public static function divisionCases(): array
     {
-        // The upline rounding rule is unconfirmed; adding divide() before the
-        // client answers would bake a guess about money into the system.
-        $this->assertFalse(
-            method_exists(Money::class, 'divide'),
-            'Money::divide() must not exist until the upline rounding rule is confirmed.'
-        );
+        // The acceptance matrix: pool 75,000 split by the eligible upline count.
+        return [
+            ['75000.00', '5', '15000.00'],
+            ['75000.00', '4', '18750.00'],
+            ['75000.00', '3', '25000.00'],
+            ['75000.00', '2', '37500.00'],
+            ['75000.00', '1', '75000.00'],
+            // Uneven splits, rounded off.
+            ['50000.00', '3', '16666.67'],
+            ['100.00', '3', '33.33'],
+            ['200.00', '3', '66.67'],
+            ['0.05', '2', '0.03'],   // 0.025 rounds half-up
+            ['0.01', '3', '0.00'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('divisionCases')]
+    public function division_rounds_off_to_two_decimals(string $pool, string $count, string $expected): void
+    {
+        $this->assertSame($expected, Money::divide($pool, $count));
+    }
+
+    #[Test]
+    public function rounding_is_half_up(): void
+    {
+        $this->assertSame('1.24', Money::round('1.2449'));
+        $this->assertSame('1.25', Money::round('1.245'));
+        $this->assertSame('1.25', Money::round('1.2451'));
+        $this->assertSame('-1.25', Money::round('-1.245'));
+        $this->assertSame('0.00', Money::round('0.004'));
+        $this->assertSame('0.01', Money::round('0.005'));
+    }
+
+    #[Test]
+    public function an_uneven_split_leaves_a_visible_residual(): void
+    {
+        // Rounding each share independently means they need not re-sum to the
+        // pool. That difference is real money and callers must surface it.
+        $share = Money::divide('50000.00', '3');
+        $distributed = Money::multiply($share, '3');
+
+        $this->assertSame('16666.67', $share);
+        $this->assertSame('50000.01', $distributed);
+        $this->assertSame('0.01', Money::subtract($distributed, '50000.00'));
+    }
+
+    #[Test]
+    public function dividing_by_zero_is_rejected(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Division by zero');
+
+        Money::divide('75000.00', '0');
     }
 }

@@ -12,10 +12,11 @@ use InvalidArgumentException;
  * around as a STRING and computed with bcmath. A float must never appear between
  * reading Sq.Ft. from the database and writing an amount to the ledger.
  *
- * Division is deliberately absent. The upline pool is split equally among the
- * eligible uplines, and the rounding rule for the resulting paise is not yet
- * confirmed by the client (docs/PROJECT_STATE.md, open question 4). Adding a
- * divide() here before that answer would bake in a guess about money.
+ * Division rounds half-up to the money scale — client-confirmed 2026-08-15
+ * ("round off"). Because each share is rounded independently, the shares may not
+ * re-sum to exactly the pool: ₹50,000 split three ways gives 3 × ₹16,666.67 =
+ * ₹50,000.01. That residual is real money and must never be silently swallowed,
+ * so callers are expected to record it (see UplineRewardService).
  */
 final class Money
 {
@@ -33,6 +34,48 @@ final class Money
         self::assertNumeric($b);
 
         return bcmul($a, $b, $scale);
+    }
+
+    /**
+     * Divide, rounding half-up to the money scale.
+     *
+     * Client-confirmed rounding rule: "round off". ₹50,000 / 3 = ₹16,666.6667
+     * becomes ₹16,666.67.
+     *
+     * @throws InvalidArgumentException when dividing by zero
+     */
+    public static function divide(string $a, string $b, int $scale = self::SCALE): string
+    {
+        self::assertNumeric($a);
+        self::assertNumeric($b);
+
+        if (bccomp($b, '0', 12) === 0) {
+            throw new InvalidArgumentException('Division by zero in money arithmetic.');
+        }
+
+        // Extra precision first, then round — bcdiv alone truncates.
+        return self::round(bcdiv($a, $b, $scale + 6), $scale);
+    }
+
+    /**
+     * Round half-up to the given scale.
+     *
+     * bcadd truncates at its scale, so adding a half-unit first turns truncation
+     * into half-up rounding without ever touching a float.
+     */
+    public static function round(string $value, int $scale = self::SCALE): string
+    {
+        self::assertNumeric($value);
+
+        $negative = bccomp($value, '0', $scale + 6) < 0;
+        $absolute = $negative ? bcmul($value, '-1', $scale + 6) : $value;
+
+        $half = '0.'.str_repeat('0', $scale).'5';
+        $rounded = bcadd($absolute, $half, $scale);
+
+        return $negative && bccomp($rounded, '0', $scale) !== 0
+            ? bcmul($rounded, '-1', $scale)
+            : $rounded;
     }
 
     public static function add(string $a, string $b, int $scale = self::SCALE): string

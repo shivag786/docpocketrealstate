@@ -7,8 +7,10 @@ use App\Enums\RewardType;
 use App\Http\Controllers\Controller;
 use App\Models\CalculationRun;
 use App\Models\RewardLedger;
+use App\Models\UplineCalculation;
 use App\Services\CalculationRunService;
 use App\Services\DirectRewardService;
+use App\Services\UplineRewardService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -25,6 +27,7 @@ class CalculationController extends Controller
 {
     public function __construct(
         private readonly DirectRewardService $direct,
+        private readonly UplineRewardService $upline,
         private readonly CalculationRunService $runs,
     ) {}
 
@@ -33,10 +36,12 @@ class CalculationController extends Controller
         $period = $request->query('period', now()->format('Y-m'));
 
         $preview = null;
+        $uplinePreview = null;
         $error = null;
 
         try {
             $preview = $this->direct->preview($period);
+            $uplinePreview = $this->upline->preview($period);
         } catch (Throwable $e) {
             $error = $e->getMessage();
         }
@@ -44,8 +49,10 @@ class CalculationController extends Controller
         return view('admin.calculations.index', [
             'period' => $period,
             'preview' => $preview,
+            'uplinePreview' => $uplinePreview,
             'previewError' => $error,
             'directRun' => $this->runs->completedRun($period, CalculationRunType::Direct),
+            'uplineRun' => $this->runs->completedRun($period, CalculationRunType::Upline),
             'runs' => CalculationRun::with('initiatedBy:id,name')
                 ->latest('id')
                 ->limit(10)
@@ -74,6 +81,61 @@ class CalculationController extends Controller
                 number_format((float) $run->total_sqft, 2),
                 number_format((float) $run->total_amount, 2),
             ));
+    }
+
+    public function uplineRun(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'period' => ['required', 'string', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
+        ]);
+
+        try {
+            $run = $this->upline->calculate($validated['period'], $request->user());
+        } catch (Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('admin.calculations.show', $run)
+            ->with('success', sprintf(
+                'Upline reward calculated for %s: %s shares, ₹%s distributed.',
+                $run->period,
+                number_format($run->records_created),
+                number_format((float) $run->total_amount, 2),
+            ));
+    }
+
+    /**
+     * Upline ledger for a period, with the working behind each share.
+     */
+    public function uplineLedger(Request $request): View
+    {
+        $period = $request->query('period', now()->format('Y-m'));
+
+        return view('admin.calculations.upline', [
+            'period' => $period,
+            'rows' => UplineCalculation::query()
+                ->forPeriod($period)
+                ->with(['seller:id,member_code,name', 'receiver:id,member_code,name'])
+                ->orderBy('seller_id')
+                ->orderBy('upline_level')
+                ->paginate(config('members.per_page'))
+                ->withQueryString(),
+            'receivers' => RewardLedger::query()
+                ->ofType(RewardType::Upline)
+                ->forPeriod($period)
+                ->with('member:id,member_code,name')
+                ->selectRaw('member_id, COUNT(*) as entries, SUM(amount) as amount')
+                ->groupBy('member_id')
+                ->orderByDesc('amount')
+                ->limit(10)
+                ->get(),
+            'totals' => RewardLedger::query()
+                ->ofType(RewardType::Upline)
+                ->forPeriod($period)
+                ->selectRaw('COUNT(*) as entries, COALESCE(SUM(amount),0) as amount')
+                ->first(),
+        ]);
     }
 
     public function show(CalculationRun $run): View

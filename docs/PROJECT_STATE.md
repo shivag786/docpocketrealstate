@@ -4,19 +4,19 @@ This is the single source of truth for current development progress.
 Claude MUST update it after every task/phase.
 
 ## Current phase
-Phase 5 — Direct Reward
+Phase 6 — Upline
 
 ## Current status
 COMPLETE — awaiting client sign-off
 
 ## Last completed task
-Phase 5 — Direct Reward engine, calculation runs and reward ledger.
+Phase 6 — Upline Reward engine with compression and confirmed rounding.
 
 ## Last update
-2026-08-15 19:20
+2026-08-15 21:15
 
 ## Current objective
-Direct reward and ledger are correct. **Achieved.**
+0–5 upline cases pass tests. **Achieved.**
 
 ## Completed phases
 - [x] Phase 1 — Foundation
@@ -24,7 +24,7 @@ Direct reward and ledger are correct. **Achieved.**
 - [x] Phase 3 — Tree & Network UX
 - [x] Phase 4 — Projects/Properties/Registry Sales
 - [x] Phase 5 — Direct Reward
-- [ ] Phase 6 — Upline
+- [x] Phase 6 — Upline
 - [ ] Phase 7 — Team Sales
 - [ ] Phase 8 — Target 1
 - [ ] Phase 9 — Target 2
@@ -38,7 +38,44 @@ Direct reward and ledger are correct. **Achieved.**
 - [ ] Phase 17 — QA/Deployment
 
 ## Current task
-None. Phase 5 delivered; Phase 6 not started (and blocked — see below).
+None. Phase 6 delivered; Phase 7 not started.
+
+## Phase 6 decisions (client-confirmed 2026-08-15)
+1. **Eligibility = active members only, with compression.** Walking up from the seller,
+   an inactive member is SKIPPED and the walk continues past them until 5 ACTIVE uplines
+   are found. The divisor only drops below 5 when the chain genuinely runs out of active
+   members. Both behaviours are tested.
+2. **Rounding = round off** (half-up, 2 decimals). ₹50,000 / 3 = ₹16,666.67 each.
+
+**Consequence made visible, not hidden:** rounding each share independently means the
+shares need not re-sum to the pool. 3 × ₹16,666.67 = ₹50,000.01, one paisa above the
+pool. The Calculation Center preview shows this residual before the run, and
+`Money`'s unit tests pin the behaviour. Nothing silently absorbs it.
+
+**Schema fix required by this phase.** The `reward_ledger` duplicate-protection index
+was `(member_id, reward_type, source_type, source_id)`. That works for Direct, where the
+source is a sale id unique to one period, but an upline reward is sourced from a SELLER,
+which recurs every month — the second month would have collided. `period` was added to
+the index. Protection within a period is unchanged; the same source may now legitimately
+pay again in a later month. A regression test covers it.
+
+## Files changed in Phase 6
+**Created**
+- `app/Services/UplineRewardService.php`
+- `app/Models/UplineCalculation.php`
+- 2 migrations (period added to the ledger unique index; `upline_calculations`)
+- `resources/views/admin/calculations/upline.blade.php`
+- `tests/Feature/Reward/UplineRewardTest.php`
+
+**Modified**
+- `app/Support/Money.php` — `divide()` and `round()` added now that the rule is confirmed
+- `app/Http/Controllers/Admin/CalculationController.php` — upline preview, run and ledger
+- `app/Http/Controllers/Admin/MemberController.php` — supplies upline rewards
+- `routes/web.php`, sidebar (Upline Rewards enabled)
+- `resources/views/admin/calculations/index.blade.php` — Calculate Upline wired
+- `resources/views/admin/members/show.blade.php` — Upline Reward tab activated
+- `tests/Unit/MoneyTest.php` — division/rounding suite replaces the "divide must not
+  exist" guard
 
 ## Sale entry correction (client-confirmed 2026-08-15, after Phase 5)
 
@@ -294,7 +331,29 @@ level 2. RS8 (Deepak Joshi) and RS9 (Priya Nair) were created by Claude during P
 verification and can be deleted if unwanted.
 
 ## Tests
-195 passed, 580 assertions, 0 failures (PHPUnit 12.5.33, ~12 s).
+228 passed, 697 assertions, 0 failures (PHPUnit 12.5.33, ~12 s).
+
+**Phase 6 (33)**
+- The full acceptance matrix as a data provider: pool 75,000 with 5/4/3/2/1 uplines →
+  15,000 / 18,750 / 25,000 / 37,500 / 75,000 each; 0 uplines → no calculation at all
+- More than 5 levels: only the 5 nearest eligible are paid, everyone above gets nothing
+- Compression: an inactive nearest upline is skipped and the walk finds a replacement,
+  so the count stays 5; the divisor only drops when no replacement exists; an entirely
+  inactive chain produces nothing
+- The pool uses the seller's whole month, not each sale — three sales of 500/700/300
+  behave exactly like one sale of 1,500
+- Each seller distributed independently; one member may receive from several sellers
+- The same (receiver, seller) pair pays again in a different month (index regression)
+- Target status has no effect, plus a structural test that the engine references no
+  Target or Team service
+- Rounding: 3 shares of ₹16,666.67 from a ₹50,000 pool, with the ₹0.01 residual exposed
+  in the preview
+- The full working is recorded per share, and compression is auditable via
+  `chain_depth` > `upline_level`
+- Direct and Upline coexist without interfering, and a seller receives no upline share
+  from their own sale
+- Money unit tests extended: the division matrix, half-up rounding including negatives,
+  the residual, and division by zero rejected
 
 **Sale entry correction (7 new)**
 - only member and Sq.Ft. are required; the other fields raise no errors when absent
@@ -392,13 +451,18 @@ protection, mid-session deactivation, AJAX envelope contract.
 - Vite production build succeeds
 
 ## Known issues/blockers
-**Phase 6 (Upline) is BLOCKED** on two answers — questions 3 and 4 below. Both change
-payout amounts, so neither can be assumed:
-- what makes an upline "eligible" (now narrowed: is an Inactive member counted as one of
-  the five, skipped so the walk continues past them, or does the chain stop there?)
-- the rounding rule when the pool divides unevenly
+**Phase 7 (Team Sales) is not blocked.** The rule — own + all connected downline
+approved sales, calculated independently per Team Leader — is fully specified. The only
+open item is question 9 (downline depth), and the documentation says "all connected",
+which Phase 3's tree already implements as unlimited depth.
 
-No defects were found during Phase 5.
+**Recalculation still unavailable (Phase 12).** A completed run blocks a second run for
+the same period and type. Sales entered after a period has been calculated will not
+appear in rewards until controlled recalculation exists. This already affects the live
+data: sale #4 (RS6) was entered after the 2026-08 Direct run, so it has an upline reward
+but no direct reward.
+
+No defects were found during Phase 6.
 
 **Defect found and fixed during Phase 4**
 - `RegistrySaleFactory` could produce a `sale_date` later than its `registry_date` when
@@ -433,21 +497,16 @@ Notes:
    issue, cosmetic, does not affect output.
 
 ## Business questions pending
-Grouped by the phase they block. **Phase 6 cannot start until questions 3 and 4 are
-answered.**
+Grouped by the phase they block. **Phase 7 is not blocked by any of these.**
+
+Resolved in Phase 6: upline eligibility (active only, with compression) and the rounding
+rule (round off) — see "Phase 6 decisions" above.
 
 Resolved in Phase 2: member code format, root members, sponsor re-parenting policy and
 member status values — see "Phase 2 decisions" above.
 
 Resolved in Phase 4: approval workflow, the period date, required sale fields and
 editability — see "Phase 4 decisions" above.
-
-**Before Phase 6 (Upline)**
-3. What makes an upline "eligible"? Anyone in the sponsor chain up to 5 levels, only
-   *active* members, or a sales/qualification condition? Not defined anywhere in the docs.
-4. Final currency rounding rule when equal division produces paise
-   (e.g. pool 50,000 ÷ 3 = 16,666.6667): round each share and absorb the residual, or
-   allocate the remainder to a specific upline?
 
 **Before Phases 8–10 (Targets)**
 5. Reward amounts for Target 2 and Target 3 — never stated in any document. Only
@@ -469,13 +528,19 @@ editability — see "Phase 4 decisions" above.
     member login later is additive and does not invalidate Phase 1.
 
 ## Last known good state
-Phase 5 complete. The first reward engine is live: Direct Sale at own approved Sq.Ft. ×
-₹40, writing one traceable ledger row per sale inside a transactional calculation run,
-with two independent layers of duplicate protection and exact decimal arithmetic. 188
-passing tests. Committed to git.
+Phase 6 complete. Two of the four reward engines are live and independent:
 
-Verified live: RS1's 1,500 Sq.Ft. sale produced exactly ₹60,000 in run #1, and a second
-run attempt was refused with the ledger unchanged.
+- **Direct** — own approved Sq.Ft. × ₹40, one ledger row per sale
+- **Upline** — seller's monthly Sq.Ft. × ₹50, split equally among up to 5 active uplines
+  with inactive members skipped, shares rounded off, and the full working recorded in
+  `upline_calculations`
+
+228 passing tests. Committed to git.
+
+Verified live on the real network: RS1's 1,500 Sq.Ft. sale produced exactly ₹60,000
+direct; RS6's 1,500 Sq.Ft. sale produced a ₹75,000 pool split between RS5 and RS4 at
+₹37,500 each, matching the acceptance matrix. Duplicate runs of both engines were
+refused with the ledger unchanged.
 
 Contracts later engines must follow:
 - read sales via `RegistrySale::approved()` and `::forPeriod()` — never the table directly

@@ -52,6 +52,7 @@
             ['team', 'Direct Team', 'bi-people', null],
             ['tree', 'Full Tree', 'bi-diagram-3', null],
             ['direct', 'Direct Reward', 'bi-cash-coin', null],
+            ['upline-reward', 'Upline Reward', 'bi-arrow-up-circle', null],
         ] as [$id, $label, $icon, $phase])
             <li class="nav-item" role="presentation">
                 <button class="nav-link {{ $loop->first ? 'active' : '' }}"
@@ -66,7 +67,6 @@
 
         @foreach ([
             ['Sales', 'bi-receipt', 4],
-            ['Upline Reward', 'bi-arrow-up-circle', 6],
             ['Targets', 'bi-bullseye', 8],
             ['Reward Ledger', 'bi-journal-text', 13],
         ] as [$label, $icon, $phase])
@@ -362,6 +362,56 @@
                                 <th class="text-end">{{ number_format($directRewards->sum('entries')) }}</th>
                                 <th class="text-end">{{ number_format((float) $directRewards->sum('sqft'), 2) }}</th>
                                 <th class="text-end">₹{{ number_format((float) $directRewards->sum('amount'), 2) }}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            @endif
+        </div>
+
+        {{-- Upline Reward --}}
+        <div class="tab-pane fade" id="tab-upline-reward" role="tabpanel">
+            <p class="small text-muted">
+                A share of each downline seller's monthly pool
+                (their own Sq.Ft. &times; ₹{{ config('rewards.rates.upline') }}), divided
+                equally among up to {{ config('rewards.upline.max_levels') }} active
+                uplines. Inactive members are skipped when walking up the chain, and
+                target achievement has no effect on this reward.
+            </p>
+
+            @if ($uplineRewards->isEmpty())
+                <p class="text-muted mb-0">
+                    <i class="bi bi-info-circle me-1"></i>
+                    No upline reward has been calculated for this member yet.
+                    <a href="{{ route('admin.calculations.index') }}">Open the Calculation Center</a>.
+                </p>
+            @else
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Period</th>
+                                <th class="text-end">Shares received</th>
+                                <th class="text-end">Upline reward</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($uplineRewards as $row)
+                                <tr>
+                                    <td>
+                                        <a href="{{ route('admin.calculations.upline.ledger', ['period' => $row->period]) }}"
+                                           class="text-decoration-none">{{ $row->period }}</a>
+                                    </td>
+                                    <td class="text-end">{{ number_format($row->entries) }}</td>
+                                    <td class="text-end fw-semibold">₹{{ number_format((float) $row->amount, 2) }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <th>Total</th>
+                                <th class="text-end">{{ number_format($uplineRewards->sum('entries')) }}</th>
+                                <th class="text-end">₹{{ number_format((float) $uplineRewards->sum('amount'), 2) }}</th>
                             </tr>
                         </tfoot>
                     </table>

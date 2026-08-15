@@ -130,17 +130,23 @@ class CalculationCenterTest extends TestCase
     }
 
     #[Test]
-    public function the_center_shows_later_engines_as_unavailable(): void
+    public function the_center_offers_the_wired_engines_and_marks_the_rest(): void
     {
         $this->actingAs($this->admin)
             ->get(route('admin.calculations.index'))
             ->assertOk()
+            // Wired as of Phase 6.
+            ->assertSee('Calculate Direct')
             ->assertSee('Calculate Upline')
+            // Still to come, labelled with their delivering phase.
             ->assertSee('Calculate Team Targets')
             ->assertSee('Calculate Company Club')
             ->assertSee('Calculate All')
-            ->assertSee('Phase 6')
-            ->assertSee('Phase 12');
+            ->assertSee('Phase 8')
+            ->assertSee('Phase 11')
+            ->assertSee('Phase 12')
+            // Upline must no longer be advertised as unavailable.
+            ->assertDontSee('Phase 6');
     }
 
     #[Test]

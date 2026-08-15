@@ -10,6 +10,7 @@ use App\Models\Member;
 use App\Services\DirectRewardService;
 use App\Services\MemberService;
 use App\Services\MemberTreeService;
+use App\Services\UplineRewardService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -82,6 +83,7 @@ class MemberController extends Controller
                 ->withQueryString(),
             'deletionBlockers' => $this->members->deletionBlockers($member),
             'directRewards' => app(DirectRewardService::class)->forMember($member),
+            'uplineRewards' => app(UplineRewardService::class)->forMember($member),
         ]);
     }
 

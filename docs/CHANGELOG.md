@@ -31,6 +31,69 @@ Chronological project history. Claude must append an entry after each meaningful
 
 ---
 
+### 2026-08-15 — Phase 6 — Upline Reward Engine
+
+**Added**
+- `UplineRewardService` — pool = seller's monthly own Sq.Ft. × ₹50, divided equally among
+  the actual eligible upline count, maximum 5
+- Compression: walking up from the seller, inactive members are skipped and the walk
+  continues past them until 5 active uplines are found
+- `upline_calculations` table recording the full working behind every share — whose sales
+  made the pool, its size, the eligible count, the receiver's level and the raw chain
+  depth, so compression is auditable
+- `Money::divide()` and `Money::round()`, half-up to 2 decimals, now that the rounding
+  rule is confirmed
+- Calculate Upline wired into the Calculation Center, with a preview that surfaces the
+  rounding residual before the run
+- Upline reward ledger page showing the distribution detail per seller
+- Upline Reward tab activated on the member profile; Upline Rewards enabled in the sidebar
+
+**Changed**
+- `reward_ledger` duplicate-protection index now includes `period`. Direct rewards are
+  sourced from a sale id, unique to one period; upline rewards are sourced from a seller,
+  which recurs monthly. Without `period` the second month would have collided with the
+  first. Protection within a period is unchanged.
+- `Money`'s "divide must not exist" guard replaced by a full division and rounding suite
+
+**Database**
+- New `upline_calculations` table, unique on (period, seller, receiver)
+- `reward_ledger_source_unique` extended to include `period`
+
+**Tests**
+- 33 new tests (228 total, 697 assertions, all passing)
+- The acceptance matrix runs as a data provider: pool 75,000 with 5/4/3/2/1 uplines gives
+  15,000 / 18,750 / 25,000 / 37,500 / 75,000 each, and 0 uplines produces no calculation
+- Compression covered three ways: a skipped upline replaced from deeper in the chain, a
+  divisor that drops when no replacement exists, and an entirely inactive chain paying
+  nothing
+- Regression test for the period index: the same (receiver, seller) pair pays in two
+  consecutive months
+- Structural test that the engine references no Target or Team service
+
+**Manual verification**
+- Recorded 1,500 Sq.Ft. for RS6, whose chain is RS6 → RS5 → RS4
+- Preview showed a ₹75,000 pool; the run produced 2 shares of ₹37,500, matching the
+  acceptance matrix for 2 eligible uplines
+- `upline_calculations` recorded both shares with pool 75,000, eligible count 2, levels
+  1 and 2, chain depths 1 and 2
+- The seller RS6 received no upline share from their own sale
+- A second upline run was refused and the ledger still held exactly 2 rows
+
+**Issues**
+- None found in this phase.
+
+**Decision**
+- Eligibility is active members only, with compression: skip inactive, keep walking
+- Shares are rounded off (half-up, 2 decimals)
+- The rounding residual is surfaced in the preview rather than silently absorbed —
+  3 × ₹16,666.67 = ₹50,000.01 against a ₹50,000 pool
+
+**Next**
+- Phase 7 — Team Sales: own + all connected downline approved sales, calculated
+  independently for each Team Leader. Not started, and not blocked.
+
+---
+
 ### 2026-08-15 — Correction — Simplified sale entry
 
 Client correction requested after Phase 5. Supersedes Phase 4 decision #3.

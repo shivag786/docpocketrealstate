@@ -100,14 +100,93 @@
             </div>
         </div>
 
-        {{-- The remaining engines, shown but not yet wired. --}}
+        {{-- Upline --}}
         <div class="col-12 col-lg-6">
             <div class="card h-100">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <strong>Calculate Upline</strong>
+                    <span class="badge text-bg-info">₹{{ config('rewards.rates.upline') }} pool</span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        Seller's monthly own Sq.Ft. &times; ₹{{ config('rewards.rates.upline') }},
+                        divided equally among up to {{ config('rewards.upline.max_levels') }}
+                        active uplines. Inactive members are skipped. Target achievement does
+                        not affect this reward.
+                    </p>
+
+                    @if ($uplinePreview)
+                        <div class="row g-2 mb-3">
+                            @foreach ([
+                                ['Sellers', number_format($uplinePreview['sellers'])],
+                                ['With uplines', number_format($uplinePreview['distributing'])],
+                                ['Total pool', '₹' . number_format((float) $uplinePreview['pool'], 2)],
+                                ['Shares to pay', number_format($uplinePreview['receipts'])],
+                            ] as [$label, $value])
+                                <div class="col-6">
+                                    <div class="border rounded p-2">
+                                        <div class="stat-label">{{ $label }}</div>
+                                        <div class="fw-semibold">{{ $value }}</div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        @if ((float) $uplinePreview['residual'] !== 0.0)
+                            <div class="alert alert-warning small py-2 d-flex gap-2">
+                                <i class="bi bi-info-circle mt-1"></i>
+                                <div>
+                                    Rounding residual
+                                    <strong>₹{{ number_format((float) $uplinePreview['residual'], 2) }}</strong>
+                                    — shares are rounded off individually, so the distributed
+                                    total differs from the pool by this much.
+                                </div>
+                            </div>
+                        @endif
+                    @endif
+
+                    @if ($uplineRun)
+                        <div class="alert alert-success small d-flex gap-2 mb-3">
+                            <i class="bi bi-check-circle mt-1"></i>
+                            <div>
+                                Already calculated for {{ $period }} —
+                                <a href="{{ route('admin.calculations.show', $uplineRun) }}">run #{{ $uplineRun->id }}</a>.
+                            </div>
+                        </div>
+
+                        <a href="{{ route('admin.calculations.upline.ledger', ['period' => $period]) }}"
+                           class="btn btn-outline-primary">
+                            <i class="bi bi-journal-text me-1"></i>View upline reward ledger
+                        </a>
+                    @else
+                        <form method="POST" action="{{ route('admin.calculations.upline') }}">
+                            @csrf
+                            <input type="hidden" name="period" value="{{ $period }}">
+                            <button type="submit" class="btn btn-primary"
+                                    @disabled(! $uplinePreview || $uplinePreview['distributing'] === 0)
+                                    data-confirm-submit="Calculate upline rewards for {{ $period }}?">
+                                <i class="bi bi-arrow-up-circle me-1"></i>Calculate Upline for {{ $period }}
+                            </button>
+                        </form>
+
+                        @if ($uplinePreview && $uplinePreview['distributing'] === 0)
+                            <div class="form-text">
+                                No seller in this period has an eligible upline, so there is
+                                nothing to distribute.
+                            </div>
+                        @endif
+                    @endif
+                </div>
+            </div>
+        </div>
+
+        {{-- The remaining engines, shown but not yet wired. --}}
+        <div class="col-12">
+            <div class="card">
                 <div class="card-header bg-white"><strong>Other engines</strong></div>
                 <div class="card-body">
                     <div class="d-grid gap-2">
                         @foreach ([
-                            ['Calculate Upline', 6, 'Seller monthly Sq.Ft. × ₹' . config('rewards.rates.upline') . ', split across eligible uplines'],
                             ['Calculate Team Targets', 8, 'Own + connected downline sales against targets 1-3'],
                             ['Calculate Company Club', 11, 'All approved company Sq.Ft. × ₹' . config('rewards.rates.company_club')],
                             ['Calculate All', 12, 'Runs every engine for the period in one controlled operation'],

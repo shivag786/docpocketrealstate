@@ -23,7 +23,7 @@
         'Rewards' => [
             ['label' => 'Calculations', 'icon' => 'bi-calculator', 'route' => 'admin.calculations.index', 'active' => 'admin.calculations.*', 'phase' => 12],
             ['label' => 'Targets', 'icon' => 'bi-bullseye', 'route' => null, 'phase' => 8],
-            ['label' => 'Upline Rewards', 'icon' => 'bi-arrow-up-circle', 'route' => null, 'phase' => 6],
+            ['label' => 'Upline Rewards', 'icon' => 'bi-arrow-up-circle', 'route' => 'admin.calculations.upline.ledger', 'phase' => 6],
             ['label' => 'Company Club', 'icon' => 'bi-award', 'route' => null, 'phase' => 11],
             ['label' => 'Reward Ledger', 'icon' => 'bi-journal-text', 'route' => null, 'phase' => 13],
         ],
