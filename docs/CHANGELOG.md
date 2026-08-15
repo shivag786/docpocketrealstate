@@ -31,6 +31,59 @@ Chronological project history. Claude must append an entry after each meaningful
 
 ---
 
+### 2026-08-15 — Phase 7 — Team Sales Engine
+
+**Added**
+- `TeamSalesService` — own approved Sq.Ft. plus every connected downline's, at any
+  depth, for every leader. Rolls the whole network up in a single recursive query rather
+  than walking each branch separately
+- `team_calculations` table: own, direct-team and total-team Sq.Ft. per leader per
+  period, plus a contributor count
+- Team sales report and a contributors page naming every member whose sales rolled up
+  into a leader's figure, with their depth
+- `CalculationRunType::TeamSales` — a run type that produces no reward
+- Calculate Team Sales wired into the Calculation Center, badged "no payout"
+
+**Changed**
+- `CalculationRunType::rewardType()` is now nullable, because Team Sales pays nobody
+
+**Database**
+- New `team_calculations`, unique on (leader, period). `target_sqft`, `achieved` and
+  `reward_amount` exist but stay null — they belong to Phases 8-10
+
+**Tests**
+- 17 new tests (254 total, 800 assertions, all passing)
+- The Rahul/A/B/C sample from the development plan reconciles exactly: Rahul 5,000
+  (own 1,000, direct team 2,500), A 3,500, B 500 solo, C 1,500
+- Independence proven: C's single sale appears in C's, A's and Rahul's totals while only
+  C owns it
+- No depth limit: a sale 8 links below the root counts in full
+- Structural test that the engine touches neither `RewardLedger` nor the reward engines
+
+**Manual verification**
+- Ran team sales for June, July and August on the live network
+- June: 7 leaders, company total 2,300 Sq.Ft.
+- Reconciliation confirmed in SQL — actual approved sales 2,300.00 equals the sum of
+  `own_sqft` across leaders, while the sum of `total_team_sqft` is 15,300.00, inflated by
+  chain height exactly as designed and warned about in the report
+
+**Issues**
+- None found. Two behaviours flagged as unconfirmed rather than defects: an inactive
+  member's sales still count toward their leader's team total, and inactive members
+  still receive a team calculation of their own. Both matter from Phase 8, where these
+  figures start paying money.
+
+**Decision**
+- Team Sales is a measurement layer, not a reward engine — it writes no ledger rows
+- Overlap between leaders is intentional; the company figure counts each sale once and
+  the UI warns against summing the team column
+
+**Next**
+- Phase 8 — Target 1. **BLOCKED**: the cycle start rule, fixed-vs-scaling reward and
+  failure behaviour are undefined, and Targets 2 and 3 have no documented reward amount.
+
+---
+
 ### 2026-08-15 — Phase 6 — Upline Reward Engine
 
 **Added**

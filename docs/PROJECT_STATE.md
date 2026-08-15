@@ -4,19 +4,19 @@ This is the single source of truth for current development progress.
 Claude MUST update it after every task/phase.
 
 ## Current phase
-Phase 6 — Upline
+Phase 7 — Team Sales
 
 ## Current status
 COMPLETE — awaiting client sign-off
 
 ## Last completed task
-Phase 6 — Upline Reward engine with compression and confirmed rounding.
+Phase 7 — Team Sales rollup engine.
 
 ## Last update
-2026-08-15 21:15
+2026-08-15 23:40
 
 ## Current objective
-0–5 upline cases pass tests. **Achieved.**
+Rahul/A/B/C sample totals reconcile. **Achieved.**
 
 ## Completed phases
 - [x] Phase 1 — Foundation
@@ -25,7 +25,7 @@ Phase 6 — Upline Reward engine with compression and confirmed rounding.
 - [x] Phase 4 — Projects/Properties/Registry Sales
 - [x] Phase 5 — Direct Reward
 - [x] Phase 6 — Upline
-- [ ] Phase 7 — Team Sales
+- [x] Phase 7 — Team Sales
 - [ ] Phase 8 — Target 1
 - [ ] Phase 9 — Target 2
 - [ ] Phase 10 — Target 3
@@ -38,7 +38,45 @@ Phase 6 — Upline Reward engine with compression and confirmed rounding.
 - [ ] Phase 17 — QA/Deployment
 
 ## Current task
-None. Phase 6 delivered; Phase 7 not started.
+None. Phase 7 delivered; Phase 8 not started (and blocked — see below).
+
+## Phase 7 notes
+
+**Team Sales pays nobody.** It writes no `reward_ledger` rows and its run records a
+₹0.00 amount. It measures the figure the Target engine will test against 5,000 / 10,000
+/ 35,000. A test asserts the service has no reference to `RewardLedger` or the reward
+engines.
+
+**Overlap is intentional.** One sale counts in the seller's own total AND in the team
+total of every ancestor. Each leader is an independent measurement, so summing
+`total_team_sqft` across leaders is NOT a company figure — in June it gives 15,300
+against 2,300 of real sales, because each sale is multiplied by its chain height. The
+run's `total_sqft` records the honest company figure (each sale once), and the report
+carries a warning against misreading the column.
+
+**No depth limit.** "All connected downline" means the whole branch. The 5-level cap
+belongs to the upline reward and is unrelated; the report says so explicitly.
+
+**One recursive query for the whole network.** The rollup walks upward from every member
+emitting (seller, leader, depth) rows, joins sales onto that and groups by leader —
+producing every leader's totals in a single pass rather than one branch walk per leader.
+
+**Target columns left null.** `target_sqft`, `achieved` and `reward_amount` exist on
+`team_calculations` but belong to Phases 8-10.
+
+## Files changed in Phase 7
+**Created**
+- `app/Services/TeamSalesService.php`
+- `app/Models/TeamCalculation.php`
+- migration `create_team_calculations_table`
+- `resources/views/admin/calculations/team.blade.php`, `team-contributors.blade.php`
+- `tests/Feature/Reward/TeamSalesTest.php`
+
+**Modified**
+- `app/Enums/CalculationRunType.php` — added `TeamSales`; `rewardType()` is now nullable
+  because this run type produces no reward
+- `app/Http/Controllers/Admin/CalculationController.php` — team preview, run and reports
+- `routes/web.php`, `resources/views/admin/calculations/index.blade.php`
 
 ## Phase 6 decisions (client-confirmed 2026-08-15)
 1. **Eligibility = active members only, with compression.** Walking up from the seller,
@@ -331,7 +369,25 @@ level 2. RS8 (Deepak Joshi) and RS9 (Priya Nair) were created by Claude during P
 verification and can be deleted if unwanted.
 
 ## Tests
-228 passed, 697 assertions, 0 failures (PHPUnit 12.5.33, ~12 s).
+254 passed, 800 assertions, 0 failures (PHPUnit 12.5.33, ~14 s).
+
+**Phase 7 (17)**
+- The Rahul/A/B/C sample reconciles exactly: Rahul 5,000 (own 1,000, direct 2,500),
+  A 3,500, B 500 solo, C 1,500
+- Every leader independent: C's single sale appears in C's, A's and Rahul's team totals
+  while only C owns it
+- No depth limit: a sale 8 links below the root still counts in full
+- The company total counts each sale once (4,500) while summing team totals gives 9,500
+- The engine pays nobody and leaves the target columns null
+- Members with no sales anywhere get no row; periods are rolled up separately
+- A second run for the same period is refused
+- Contributors name everyone who rolled up, with their depth
+- The preview writes nothing
+- Structural test: no dependency on `RewardLedger` or the reward engines
+
+**Phase 6 (33)**
+- The full acceptance matrix as a data provider: pool 75,000 with 5/4/3/2/1 uplines →
+  15,000 / 18,750 / 25,000 / 37,500 / 75,000 each; 0 uplines → no calculation at all
 
 **Phase 6 (33)**
 - The full acceptance matrix as a data provider: pool 75,000 with 5/4/3/2/1 uplines →
@@ -451,10 +507,29 @@ protection, mid-session deactivation, AJAX envelope contract.
 - Vite production build succeeds
 
 ## Known issues/blockers
-**Phase 7 (Team Sales) is not blocked.** The rule — own + all connected downline
-approved sales, calculated independently per Team Leader — is fully specified. The only
-open item is question 9 (downline depth), and the documentation says "all connected",
-which Phase 3's tree already implements as unlimited depth.
+**Phase 8 (Target 1) is BLOCKED** on questions 5–8 below. The threshold and reward for
+Target 1 are confirmed (5,000 Sq.Ft. → ₹150,000), but the cycle start rule, whether the
+reward is fixed or scales, and what happens on failure are all undefined — and Target 2
+and 3 have no documented reward at all.
+
+**UNANSWERED, raised three times — the upline pool source.** The client wrote "upline
+amount calculated - prashant sqft × 50", where prashant is the UPLINE, not the seller.
+The engine implements the documented rule (SELLER's Sq.Ft. × ₹50). If the other reading
+was meant, every upline figure for June, July and August is wrong and must be
+recalculated. A test (`the_pool_comes_from_the_seller_not_the_upline`) pins the current
+behaviour so the change would be contained.
+
+**Two Phase 7 items flagged but not confirmed:**
+1. An INACTIVE member's sales still count toward their leader's team total. Reasoning: a
+   completed sale happened, and member status governs who *receives* an upline share
+   rather than whether a sale is measured. Not explicitly confirmed. It matters from
+   Phase 8, where team totals start paying money.
+2. Inactive members still receive a team calculation row of their own (RS12 in the live
+   data has a 2,300 team total). Same question, other side.
+
+**Recalculation still unavailable (Phase 12)** and now spans three engines. Live effect:
+sale #4 (RS6) has upline and team figures but no direct reward, because it was entered
+after the August Direct run closed.
 
 **Recalculation still unavailable (Phase 12).** A completed run blocks a second run for
 the same period and type. Sales entered after a period has been calculated will not
@@ -497,7 +572,8 @@ Notes:
    issue, cosmetic, does not affect output.
 
 ## Business questions pending
-Grouped by the phase they block. **Phase 7 is not blocked by any of these.**
+Grouped by the phase they block. **Phase 8 cannot start until questions 5–8 are
+answered.**
 
 Resolved in Phase 6: upline eligibility (active only, with compression) and the rounding
 rule (round off) — see "Phase 6 decisions" above.
@@ -528,7 +604,20 @@ editability — see "Phase 4 decisions" above.
     member login later is additive and does not invalidate Phase 1.
 
 ## Last known good state
-Phase 6 complete. Two of the four reward engines are live and independent:
+Phase 7 complete. Two reward engines plus the team measurement layer:
+
+- **Direct** — own approved Sq.Ft. × ₹40, one ledger row per sale
+- **Upline** — seller's monthly Sq.Ft. × ₹50, split among up to 5 active uplines
+- **Team Sales** — own + all connected downline, unlimited depth, pays nobody
+
+254 passing tests. Live data covers June, July and August 2026.
+
+Verified live: June company sales 2,300 Sq.Ft. reconcile exactly against the sum of
+`own_sqft` across all leaders, while the sum of `total_team_sqft` is 15,300 — inflated
+by chain height exactly as expected and warned about in the UI.
+
+### Earlier state (Phase 6)
+Two of the four reward engines are live and independent:
 
 - **Direct** — own approved Sq.Ft. × ₹40, one ledger row per sale
 - **Upline** — seller's monthly Sq.Ft. × ₹50, split equally among up to 5 active uplines

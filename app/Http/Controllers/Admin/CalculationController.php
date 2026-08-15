@@ -8,9 +8,11 @@ use App\Http\Controllers\Controller;
 use App\Models\CalculationRun;
 use App\Models\Member;
 use App\Models\RewardLedger;
+use App\Models\TeamCalculation;
 use App\Models\UplineCalculation;
 use App\Services\CalculationRunService;
 use App\Services\DirectRewardService;
+use App\Services\TeamSalesService;
 use App\Services\UplineRewardService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,6 +31,7 @@ class CalculationController extends Controller
     public function __construct(
         private readonly DirectRewardService $direct,
         private readonly UplineRewardService $upline,
+        private readonly TeamSalesService $team,
         private readonly CalculationRunService $runs,
     ) {}
 
@@ -43,6 +46,7 @@ class CalculationController extends Controller
         try {
             $preview = $this->direct->preview($period);
             $uplinePreview = $this->upline->preview($period);
+            $teamPreview = $this->team->preview($period);
         } catch (Throwable $e) {
             $error = $e->getMessage();
         }
@@ -51,9 +55,11 @@ class CalculationController extends Controller
             'period' => $period,
             'preview' => $preview,
             'uplinePreview' => $uplinePreview,
+            'teamPreview' => $teamPreview ?? null,
             'previewError' => $error,
             'directRun' => $this->runs->completedRun($period, CalculationRunType::Direct),
             'uplineRun' => $this->runs->completedRun($period, CalculationRunType::Upline),
+            'teamRun' => $this->runs->completedRun($period, CalculationRunType::TeamSales),
             'runs' => CalculationRun::with('initiatedBy:id,name')
                 ->latest('id')
                 ->limit(10)
@@ -135,6 +141,66 @@ class CalculationController extends Controller
                 ->ofType(RewardType::Upline)
                 ->forPeriod($period)
                 ->selectRaw('COUNT(*) as entries, COALESCE(SUM(amount),0) as amount')
+                ->first(),
+        ]);
+    }
+
+    public function teamSalesRun(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'period' => ['required', 'string', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
+        ]);
+
+        try {
+            $run = $this->team->calculate($validated['period'], $request->user());
+        } catch (Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()
+            ->route('admin.calculations.team.report', ['period' => $run->period])
+            ->with('success', sprintf(
+                'Team sales calculated for %s: %s leaders rolled up.',
+                $run->period,
+                number_format($run->records_created),
+            ));
+    }
+
+    /**
+     * Team sales report — every leader's own + downline totals for a period.
+     */
+    public function teamReport(Request $request): View
+    {
+        $period = $request->query('period', now()->format('Y-m'));
+
+        return view('admin.calculations.team', [
+            'period' => $period,
+            'rows' => TeamCalculation::query()
+                ->forPeriod($period)
+                ->with('leader:id,member_code,name,sponsor_id,status')
+                ->orderByDesc('total_team_sqft')
+                ->paginate(config('members.per_page'))
+                ->withQueryString(),
+            'companySqft' => TeamCalculation::query()
+                ->forPeriod($period)
+                ->sum('own_sqft'),
+        ]);
+    }
+
+    /**
+     * Which members' sales rolled up into one leader's team total.
+     */
+    public function teamContributors(Request $request, Member $member): View
+    {
+        $period = $request->query('period', now()->format('Y-m'));
+
+        return view('admin.calculations.team-contributors', [
+            'member' => $member,
+            'period' => $period,
+            'contributors' => $this->team->contributors($member, $period),
+            'calculation' => TeamCalculation::query()
+                ->forPeriod($period)
+                ->where('leader_id', $member->id)
                 ->first(),
         ]);
     }

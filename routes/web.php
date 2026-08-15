@@ -70,6 +70,13 @@ Route::middleware(['auth', 'active'])->group(function () {
                 Route::get('upline', [CalculationController::class, 'uplineLedger'])->name('upline.ledger');
                 Route::get('upline/explain/{member}', [CalculationController::class, 'uplineExplain'])
                     ->name('upline.explain');
+
+                // Team sales: a measurement layer that pays nobody. The Target
+                // engine (Phases 8-10) consumes these figures.
+                Route::post('team', [CalculationController::class, 'teamSalesRun'])->name('team');
+                Route::get('team', [CalculationController::class, 'teamReport'])->name('team.report');
+                Route::get('team/contributors/{member}', [CalculationController::class, 'teamContributors'])
+                    ->name('team.contributors');
                 Route::get('runs/{run}', [CalculationController::class, 'show'])->name('show');
             });
 

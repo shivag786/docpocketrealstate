@@ -180,6 +180,69 @@
             </div>
         </div>
 
+        {{-- Team sales: a measurement, not a reward --}}
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <strong>Calculate Team Sales</strong>
+                    <span class="badge text-bg-secondary">no payout</span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        Each leader's own approved Sq.Ft. plus every connected downline's,
+                        at any depth. This produces no reward — it is the figure the Target
+                        engine will measure against 5,000 / 10,000 / 35,000 Sq.Ft.
+                    </p>
+
+                    @if ($teamPreview)
+                        <div class="row g-2 mb-3">
+                            @foreach ([
+                                ['Leaders with team sales', number_format($teamPreview['leaders'])],
+                                ['Company Sq.Ft.', number_format((float) $teamPreview['company_sqft'], 2)],
+                                ['Largest team', number_format((float) $teamPreview['largest_team'], 2)],
+                            ] as [$label, $value])
+                                <div class="col-6">
+                                    <div class="border rounded p-2">
+                                        <div class="stat-label">{{ $label }}</div>
+                                        <div class="fw-semibold">{{ $value }}</div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+
+                    @if ($teamRun)
+                        <div class="alert alert-success small d-flex gap-2 mb-3">
+                            <i class="bi bi-check-circle mt-1"></i>
+                            <div>
+                                Already calculated for {{ $period }} —
+                                <a href="{{ route('admin.calculations.show', $teamRun) }}">run #{{ $teamRun->id }}</a>.
+                            </div>
+                        </div>
+
+                        <a href="{{ route('admin.calculations.team.report', ['period' => $period]) }}"
+                           class="btn btn-outline-primary">
+                            <i class="bi bi-people me-1"></i>View team sales report
+                        </a>
+                    @else
+                        <form method="POST" action="{{ route('admin.calculations.team') }}">
+                            @csrf
+                            <input type="hidden" name="period" value="{{ $period }}">
+                            <button type="submit" class="btn btn-primary"
+                                    @disabled(! $teamPreview || $teamPreview['leaders'] === 0)
+                                    data-confirm-submit="Calculate team sales for {{ $period }}?">
+                                <i class="bi bi-people me-1"></i>Calculate Team Sales for {{ $period }}
+                            </button>
+                        </form>
+
+                        @if ($teamPreview && $teamPreview['leaders'] === 0)
+                            <div class="form-text">No approved sales in this period.</div>
+                        @endif
+                    @endif
+                </div>
+            </div>
+        </div>
+
         {{-- The remaining engines, shown but not yet wired. --}}
         <div class="col-12">
             <div class="card">
@@ -187,7 +250,7 @@
                 <div class="card-body">
                     <div class="d-grid gap-2">
                         @foreach ([
-                            ['Calculate Team Targets', 8, 'Own + connected downline sales against targets 1-3'],
+                            ['Calculate Team Targets', 8, 'Tests each leader\'s team sales against targets 1-3'],
                             ['Calculate Company Club', 11, 'All approved company Sq.Ft. × ₹' . config('rewards.rates.company_club')],
                             ['Calculate All', 12, 'Runs every engine for the period in one controlled operation'],
                         ] as [$label, $phase, $description])
