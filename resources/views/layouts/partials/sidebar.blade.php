@@ -15,10 +15,10 @@
             ['label' => 'Sponsor Tree', 'icon' => 'bi-diagram-3', 'route' => 'admin.tree.index', 'active' => 'admin.tree.*', 'phase' => 3],
         ],
         'Sales' => [
-            ['label' => 'Projects', 'icon' => 'bi-buildings', 'route' => null, 'phase' => 4],
-            ['label' => 'Properties / Sites', 'icon' => 'bi-geo-alt', 'route' => null, 'phase' => 4],
-            ['label' => 'Daily Sales', 'icon' => 'bi-pencil-square', 'route' => null, 'phase' => 4],
-            ['label' => 'Sales History', 'icon' => 'bi-clock-history', 'route' => null, 'phase' => 4],
+            ['label' => 'Projects', 'icon' => 'bi-buildings', 'route' => 'admin.projects.index', 'active' => 'admin.projects.*', 'phase' => 4],
+            ['label' => 'Properties / Sites', 'icon' => 'bi-geo-alt', 'route' => 'admin.properties.index', 'active' => 'admin.properties.*', 'phase' => 4],
+            ['label' => 'Daily Sales', 'icon' => 'bi-pencil-square', 'route' => 'admin.sales.create', 'phase' => 4],
+            ['label' => 'Sales History', 'icon' => 'bi-clock-history', 'route' => 'admin.sales.index', 'active' => 'admin.sales.index', 'phase' => 4],
         ],
         'Rewards' => [
             ['label' => 'Calculations', 'icon' => 'bi-calculator', 'route' => null, 'phase' => 12],

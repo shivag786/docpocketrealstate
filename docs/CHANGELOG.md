@@ -31,6 +31,73 @@ Chronological project history. Claude must append an entry after each meaningful
 
 ---
 
+### 2026-08-15 — Phase 4 — Projects, Properties & Registry Sales
+
+**Added**
+- Projects: CRUD with search, status filter and pagination; deletion blocked once the
+  project has properties or recorded sales
+- Properties/Sites: CRUD scoped to a project, with a property code unique within its
+  project rather than globally; deletion blocked once sales exist
+- Registry sales: compact daily entry form, sales history with search, project filter
+  and date range, and a sale detail page
+- `RegistrySaleService` — recording inside a transaction, with the project/property
+  pairing re-checked server-side rather than trusted from the form
+- AJAX member lookup and a property dropdown that depends on the chosen project
+- `RegistrySale` scopes `approved()`, `forPeriod()`, `betweenDates()` and `search()` —
+  the single definitions of "approved" and "period" for every later engine
+- Filtered totals on the history screen covering all matching sales, not just the page
+
+**Changed**
+- Sidebar: Projects, Properties, Daily Sales and Sales History enabled
+- Layout footer no longer hard-codes "Phase 1"
+
+**Database**
+- `projects`, `properties` and `registry_sales` created
+- `registry_sales.sqft` is `DECIMAL(12,2)` and cast as a string, never a float, because
+  it multiplies the reward rates
+- `registry_reference` is unique — the duplicate-sale guard
+- Foreign keys to member, project and property are restricted on delete so a sale can
+  never lose its source; `entered_by` is nulled on delete so removing a staff account
+  does not destroy sale records
+- Indexes on `registry_date`, `sale_date`, `status`, `(member_id, registry_date)` and
+  `(status, registry_date)` for the monthly engines from Phase 5
+
+**Tests**
+- 41 new tests (139 total, 407 assertions, all passing)
+- Includes a test proving the period follows `registry_date` when `sale_date` falls in a
+  different month, and one asserting no edit/update/destroy routes exist
+
+**Manual verification**
+- Created project "Green Valley Enclave" with PLOT-A1 and PLOT-A2
+- Property lookup AJAX returned only that project's active sites
+- Recorded 1,500.00 Sq.Ft. for RS1 — stored approved, entered_by set, period 2026-08
+- Duplicate registry number rejected: "A sale with this registry number has already
+  been recorded"; future registry date rejected; neither row was inserted
+- History search, totals and date-range filter all correct
+- Project deletion blocked once the project had a sale
+
+**Issues**
+- `RegistrySaleFactory` could generate a `sale_date` after its `registry_date` when a
+  test overrode only the registry date. Fixed to hold the same invariant the form
+  enforces. Test-only, but it would have seeded misleading fixtures for Phases 5–7.
+- `properties.status` values are undefined in the documentation. Active/Inactive is
+  used, governing only selectability for new sales. Availability tracking
+  (Available/Sold) was NOT invented and needs confirmation if wanted.
+
+**Decision**
+- Entry is approval; no pending state
+- `registry_date` is the entry day and decides the reward month
+- Project and property both required, and must match each other
+- Registry sales are permanent — no edit, no delete. The client accepted that a
+  mistyped sale is uncorrectable; a correction workflow cannot be designed until the
+  business states what happens to rewards already calculated from it.
+
+**Next**
+- Phase 5 — Direct Reward: own approved Sq.Ft. × ₹40. Not started. No outstanding
+  business questions block it.
+
+---
+
 ### 2026-08-15 — Phase 3 — Sponsor Tree & Network UX
 
 **Added**

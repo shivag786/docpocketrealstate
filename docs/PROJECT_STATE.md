@@ -4,25 +4,25 @@ This is the single source of truth for current development progress.
 Claude MUST update it after every task/phase.
 
 ## Current phase
-Phase 3 — Tree & Network UX
+Phase 4 — Projects/Properties/Registry Sales
 
 ## Current status
 COMPLETE — awaiting client sign-off
 
 ## Last completed task
-Phase 3 — Sponsor Tree and Network UX with AJAX lazy loading.
+Phase 4 — Projects, Properties/Sites and Registry Sales.
 
 ## Last update
-2026-08-15 15:10
+2026-08-15 17:40
 
 ## Current objective
-Sample network navigates correctly without loading the entire tree. **Achieved.**
+Admin can enter and find registry-confirmed Sq.Ft. sales. **Achieved.**
 
 ## Completed phases
 - [x] Phase 1 — Foundation
 - [x] Phase 2 — Members & Sponsor
 - [x] Phase 3 — Tree & Network UX
-- [ ] Phase 4 — Projects/Properties/Registry Sales
+- [x] Phase 4 — Projects/Properties/Registry Sales
 - [ ] Phase 5 — Direct Reward
 - [ ] Phase 6 — Upline
 - [ ] Phase 7 — Team Sales
@@ -38,7 +38,47 @@ Sample network navigates correctly without loading the entire tree. **Achieved.*
 - [ ] Phase 17 — QA/Deployment
 
 ## Current task
-None. Phase 3 delivered; Phase 4 not started.
+None. Phase 4 delivered; Phase 5 not started.
+
+## Phase 4 decisions (client-confirmed 2026-08-15)
+1. **Entry is approval.** A sale counts from the moment it is recorded. There is no
+   pending state and no approval step. `SaleStatus` has a single case, `Approved`.
+2. **`registry_date` is the entry day and decides the reward month.** It defaults to
+   today and cannot be in the future. `sale_date` is retained from the documented schema
+   for reporting and mirrors the registry date when not supplied. `RegistrySale::forPeriod()`
+   is the one place this is defined; every engine from Phase 5 must use it.
+3. **Project and property are both required** on every sale, and the property must
+   belong to the chosen project (checked in validation and again in the service).
+4. **A sale is never editable or removable.** No edit, update or destroy route exists.
+
+**Consequence the client accepted:** a mistyped Sq.Ft. or wrong member is permanent and
+counts toward rewards immediately. There is no correction path. `RegistrySaleService`
+documents where one would go; it cannot be built until the business states what happens
+to rewards already calculated from a corrected sale. Cancellation and refunds remain out
+of scope per `02_BUSINESS_RULES.md` §6.
+
+Mitigations added within the decision: the registry number is unique (the same
+registration cannot be entered twice), the entry form carries an explicit warning, and
+saving requires a confirmation dialog.
+
+## Files changed in Phase 4
+**Created**
+- `app/Enums/ProjectStatus.php`, `PropertyStatus.php`, `SaleStatus.php`
+- `app/Models/Project.php`, `Property.php`, `RegistrySale.php`
+- `app/Services/RegistrySaleService.php`
+- `app/Http/Controllers/Admin/ProjectController.php`, `PropertyController.php`,
+  `RegistrySaleController.php`
+- `app/Http/Requests/Project/StoreProjectRequest.php`,
+  `Property/StorePropertyRequest.php`, `Sale/StoreRegistrySaleRequest.php`
+- 3 migrations, 3 factories
+- `resources/js/sale-entry.js`
+- `resources/views/admin/projects/*`, `properties/*`, `sales/*`
+- `tests/Feature/Sale/RegistrySaleEntryTest.php`, `SalesHistoryTest.php`,
+  `ProjectPropertyTest.php`
+
+**Modified**
+- `routes/web.php`, sidebar partial, `resources/js/app.js`
+- `resources/views/layouts/admin.blade.php` — footer no longer hard-codes "Phase 1"
 
 ## Phase 3 notes
 
@@ -181,7 +221,23 @@ level 2. RS8 (Deepak Joshi) and RS9 (Priya Nair) were created by Claude during P
 verification and can be deleted if unwanted.
 
 ## Tests
-98 passed, 290 assertions, 0 failures (PHPUnit 12.5.33, ~10 s).
+139 passed, 407 assertions, 0 failures (PHPUnit 12.5.33, ~13 s).
+
+**Phase 4 (41)**
+- Sale entry: guests blocked, sale recorded, approved immediately, operator stored and
+  un-spoofable, registry date drives the period (verified with a sale_date in a
+  different month), registry date defaults to today, sale_date mirrors it, future date
+  rejected, duplicate registry number rejected, required fields, Sq.Ft. must exceed
+  zero, max 2 decimal places, exact decimal preserved, property/project mismatch
+  rejected, inactive property rejected, inactive member rejected, no edit/update/destroy
+  routes exist, form returns ready for the next entry
+- Sales history: listing, search by registry number and by member, date-range filter,
+  project filter, totals reflecting filters across pages, period filter on registry
+  date, detail page, pagination
+- Projects/properties: creation, unique project name, delete blocked by sales and by
+  properties, empty project deletable, property creation, property code unique within
+  its project only, delete blocked by sales, AJAX lookup returns only active sites of
+  one project, invalid project rejected, only active projects offered on the sale form
 
 **Phase 3 (37)**
 - Tree service: roots only, children return exactly one level, branch totals across
@@ -233,7 +289,20 @@ protection, mid-session deactivation, AJAX envelope contract.
 - Vite production build succeeds
 
 ## Known issues/blockers
-None blocking Phase 4.
+**Phase 5 is blocked** on the upline eligibility question only for Phase 6; Phase 5
+(Direct Reward) itself has no outstanding questions and can start immediately.
+
+**Defect found and fixed during Phase 4**
+- `RegistrySaleFactory` could produce a `sale_date` later than its `registry_date` when
+  a test overrode only the registry date, generating fixtures the application would
+  reject. The factory now enforces the same invariant the form does. Test-only impact,
+  but it would have produced misleading fixtures for the Phase 5–7 engines.
+
+**Open question raised in Phase 4**
+- `properties.status` values are not defined anywhere in the documentation.
+  Active/Inactive is used, controlling only whether a site can be chosen for a new sale.
+  If the business wants availability tracking (Available / Sold / Blocked) that is a
+  different concept and must be confirmed — it was not invented.
 
 **Two defects found and fixed during Phase 3**
 1. `Member::ancestors()` traversed the loaded `sponsor` relation. Any caller that
@@ -256,17 +325,14 @@ Notes:
    issue, cosmetic, does not affect output.
 
 ## Business questions pending
-Grouped by the phase they block. **Phase 4 is blocked by questions 1 and 2 below — they
-must be answered before registry sales can be implemented.**
+Grouped by the phase they block. **Phase 5 (Direct Reward) is not blocked by any of
+these and can start immediately.**
 
 Resolved in Phase 2: member code format, root members, sponsor re-parenting policy and
 member status values — see "Phase 2 decisions" above.
 
-**Before Phase 4 (Registry Sales)**
-1. Which `registry_sales.status` values count as "approved", and is entry by an admin
-   automatically approved or is there a second approval step?
-2. Does the calculation period come from `sale_date` or `registry_date`? The schema has
-   both and they can fall in different months.
+Resolved in Phase 4: approval workflow, the period date, required sale fields and
+editability — see "Phase 4 decisions" above.
 
 **Before Phase 6 (Upline)**
 3. What makes an upline "eligible"? Anyone in the sponsor chain up to 5 levels, only
@@ -295,6 +361,11 @@ member status values — see "Phase 2 decisions" above.
     member login later is additive and does not invalidate Phase 1.
 
 ## Last known good state
-Phase 3 complete. Sponsor tree with AJAX lazy loading (one level per request), branch
-summaries via batched recursive CTEs, focus/search/level-filter controls, paginated full
-downline listing, and the tabbed member profile. 98 passing tests. Committed to git.
+Phase 4 complete. Projects and properties/sites with integrity guards, daily registry
+sale entry with duplicate protection, and searchable/filterable sales history. Sales are
+approved on entry, dated by registry date, and permanent. 139 passing tests. Committed
+to git.
+
+The sale table is now the source every reward engine reads from. Phase 5 onward must go
+through `RegistrySale::approved()` and `RegistrySale::forPeriod()` rather than querying
+the table directly, so "approved" and "period" each stay defined in exactly one place.

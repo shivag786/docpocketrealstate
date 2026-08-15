@@ -2,6 +2,9 @@
 
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\MemberController;
+use App\Http\Controllers\Admin\ProjectController;
+use App\Http\Controllers\Admin\PropertyController;
+use App\Http\Controllers\Admin\RegistrySaleController;
 use App\Http\Controllers\Admin\SponsorSearchController;
 use App\Http\Controllers\Admin\TreeController;
 use App\Http\Controllers\Auth\LoginController;
@@ -41,6 +44,20 @@ Route::middleware(['auth', 'active'])->group(function () {
                 ->name('members.search-sponsors');
 
             Route::resource('members', MemberController::class);
+
+            // Projects and properties/sites.
+            Route::resource('projects', ProjectController::class);
+
+            Route::get('properties/for-project', [PropertyController::class, 'forProject'])
+                ->name('properties.for-project');
+            Route::resource('properties', PropertyController::class)->except(['show']);
+
+            // Registry sales. No edit/update/destroy by client decision: a sale
+            // is approved on entry and is never editable afterwards.
+            Route::get('sales/entry', [RegistrySaleController::class, 'create'])->name('sales.create');
+            Route::post('sales', [RegistrySaleController::class, 'store'])->name('sales.store');
+            Route::get('sales', [RegistrySaleController::class, 'index'])->name('sales.index');
+            Route::get('sales/{sale}', [RegistrySaleController::class, 'show'])->name('sales.show');
 
             // Sponsor tree. Nodes and search are AJAX; the downline listing is a
             // paginated page because a branch can hold thousands of members.

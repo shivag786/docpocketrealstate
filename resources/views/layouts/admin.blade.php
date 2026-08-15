@@ -39,7 +39,7 @@
         </main>
 
         <footer class="border-top bg-white py-3 px-3 text-muted small">
-            {{ config('app.name') }} &mdash; back office. Phase 1 (Foundation).
+            {{ config('app.name') }} &mdash; back office.
         </footer>
     </div>
 
