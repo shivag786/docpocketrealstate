@@ -40,6 +40,34 @@ Direct reward and ledger are correct. **Achieved.**
 ## Current task
 None. Phase 5 delivered; Phase 6 not started (and blocked — see below).
 
+## Sale entry correction (client-confirmed 2026-08-15, after Phase 5)
+
+The entry form was simplified. A sale now needs **only a member and a Sq.Ft. figure**,
+with the direct amount shown live as the operator types. Project, property, registry
+number and registry date moved into a collapsed "Property & registry details" section.
+
+**This supersedes Phase 4 decision #3** (project and property both required).
+
+Rules as built:
+- `member_id` and `sqft` required; everything else optional
+- `sqft` accepts digits and one decimal point only, must exceed zero, max 2 decimals.
+  Enforced client-side as the operator types and again server-side. A thousands
+  separator ("1,500.50") is stripped rather than rejected
+- `registry_reference` stays UNIQUE, which in MySQL still allows many NULLs — so it
+  guards duplicates when supplied and is simply absent when not
+- `registry_date` remains NOT NULL in the database because it decides the reward month;
+  the form no longer asks for it and the application fills it with the entry day
+- optional never means unvalidated: a property without its project is rejected, a
+  property from the wrong project is rejected, an inactive property or member is
+  rejected, and a future registry date is rejected
+
+**RISK ACCEPTED BY THE CLIENT.** The unique registry number was the duplicate-sale
+guard. A sale entered without one has nothing to detect a duplicate against, and since
+sales are approved on entry and permanent, a double entry becomes a permanent double
+reward. No replacement guard was invented. If one is wanted, the natural candidate is a
+warning (not a block) when the same member is given the same Sq.Ft. on the same day —
+that needs confirming as a business rule first.
+
 ## Phase 5 notes
 
 **Ledger granularity.** One ledger row per approved sale, not one per member per
@@ -266,7 +294,16 @@ level 2. RS8 (Deepak Joshi) and RS9 (Priya Nair) were created by Claude during P
 verification and can be deleted if unwanted.
 
 ## Tests
-188 passed, 541 assertions, 0 failures (PHPUnit 12.5.33, ~12 s).
+195 passed, 580 assertions, 0 failures (PHPUnit 12.5.33, ~12 s).
+
+**Sale entry correction (7 new)**
+- only member and Sq.Ft. are required; the other fields raise no errors when absent
+- a sale records with member + Sq.Ft. alone and still resolves its reward month
+- several sales may omit the registry number (nulls do not collide in the unique index)
+- optional details are stored when supplied
+- a property without its project is rejected; a project without a property is fine
+- Sq.Ft. rejects `abc`, `12abc`, `1,500x`, `N/A`, `--5`
+- a thousands separator is stripped and stored as an exact decimal
 **First unit tests appear in this phase** (`tests/Unit/MoneyTest.php`).
 
 **Phase 5 (49)**

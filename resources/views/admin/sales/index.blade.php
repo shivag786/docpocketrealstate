@@ -101,8 +101,11 @@
                         <tr>
                             <td>
                                 <a href="{{ route('admin.sales.show', $sale) }}" class="fw-semibold text-decoration-none">
-                                    {{ $sale->registry_reference }}
+                                    {{ $sale->registry_reference ?? '#' . $sale->id }}
                                 </a>
+                                @unless ($sale->registry_reference)
+                                    <div class="small text-muted">no registry no.</div>
+                                @endunless
                             </td>
                             <td class="small">
                                 {{ $sale->registry_date->format('d M Y') }}
@@ -115,8 +118,12 @@
                                 <div class="small text-muted">{{ $sale->member->name }}</div>
                             </td>
                             <td class="small">
-                                {{ $sale->project->name }}
-                                <div class="text-muted">{{ $sale->property->property_code }}</div>
+                                @if ($sale->project)
+                                    {{ $sale->project->name }}
+                                    <div class="text-muted">{{ $sale->property?->property_code ?? '—' }}</div>
+                                @else
+                                    <span class="text-muted">&mdash;</span>
+                                @endif
                             </td>
                             <td class="text-end fw-semibold">{{ number_format((float) $sale->sqft, 2) }}</td>
                             <td>

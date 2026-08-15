@@ -131,8 +131,9 @@ function initProjectPropertyLink(projectSelect) {
     };
 
     const load = async (projectId, keepSelection = null) => {
+        // Project and property are optional, so "none" is always a valid choice.
         if (!projectId) {
-            setPlaceholder('Select a project first');
+            setPlaceholder('— None —');
             return;
         }
 
@@ -147,7 +148,7 @@ function initProjectPropertyLink(projectSelect) {
                 return;
             }
 
-            setPlaceholder('Select a property / site');
+            setPlaceholder('— None —');
 
             data.forEach((property) => {
                 const option = document.createElement('option');
@@ -174,9 +175,126 @@ function initProjectPropertyLink(projectSelect) {
     if (projectSelect.value) load(projectSelect.value, preselected);
 }
 
+/**
+ * Numeric-only input.
+ *
+ * Blocks anything that is not a number as it is typed, so a Sq.Ft. field can
+ * never hold letters or stray symbols. Server-side validation still enforces the
+ * same rules — this only stops the operator making the mistake in the first place.
+ */
+function initNumericInput(input) {
+    const decimals = Number(input.dataset.decimals ?? 2);
+
+    const clean = (raw) => {
+        // Digits and a single decimal point only.
+        let value = raw.replace(/[^\d.]/g, '');
+
+        const firstDot = value.indexOf('.');
+        if (firstDot !== -1) {
+            value =
+                value.slice(0, firstDot + 1) +
+                value.slice(firstDot + 1).replace(/\./g, '');
+        }
+
+        if (decimals >= 0 && firstDot !== -1) {
+            value = value.slice(0, firstDot + 1 + decimals);
+        }
+
+        return value;
+    };
+
+    input.addEventListener('input', () => {
+        const start = input.selectionStart;
+        const before = input.value;
+        const after = clean(before);
+
+        if (before !== after) {
+            input.value = after;
+            // Keep the caret where the operator expects it.
+            const delta = before.length - after.length;
+            input.setSelectionRange(Math.max(0, start - delta), Math.max(0, start - delta));
+        }
+
+        input.dispatchEvent(new CustomEvent('numeric:change', { bubbles: true }));
+    });
+
+    // Normalise a trailing/leading dot on blur: "1500." -> "1500", "." -> "".
+    input.addEventListener('blur', () => {
+        if (input.value === '' || input.value === '.') {
+            input.value = '';
+        } else if (input.value.endsWith('.')) {
+            input.value = input.value.slice(0, -1);
+        } else if (input.value.startsWith('.')) {
+            input.value = `0${input.value}`;
+        }
+
+        input.dispatchEvent(new CustomEvent('numeric:change', { bubbles: true }));
+    });
+
+    // Block the keys that would otherwise slip past the input handler.
+    input.addEventListener('keypress', (event) => {
+        if (!/[\d.]/.test(event.key)) event.preventDefault();
+    });
+}
+
+/**
+ * Live direct-sale amount: Sq.Ft. × the confirmed ₹40 rate.
+ *
+ * Display only. The authoritative figure is always the one the server computes
+ * with exact decimal arithmetic — Blade and JS are never the financial source of
+ * truth (docs/03_DATABASE_AND_ARCHITECTURE.md).
+ */
+function initDirectAmountPreview(input) {
+    const box = document.querySelector('[data-direct-amount-box]');
+    const amountEl = document.querySelector('[data-direct-amount]');
+    const formulaEl = document.querySelector('[data-direct-formula]');
+    if (!box || !amountEl || !formulaEl) return;
+
+    const rate = Number(input.dataset.rate || 0);
+
+    const inr = new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+
+    const update = () => {
+        const sqft = parseFloat(input.value);
+
+        if (!Number.isFinite(sqft) || sqft <= 0) {
+            box.classList.remove('is-active');
+            amountEl.textContent = '₹0.00';
+            formulaEl.textContent = 'Enter Sq.Ft. to see the amount';
+            return;
+        }
+
+        box.classList.add('is-active');
+        amountEl.textContent = `₹${inr.format(sqft * rate)}`;
+        formulaEl.textContent = `${inr.format(sqft)} Sq.Ft. × ₹${rate} — confirmed on save`;
+    };
+
+    input.addEventListener('numeric:change', update);
+    input.addEventListener('input', update);
+    update();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-member-picker]').forEach(initMemberPicker);
     document.querySelectorAll('[data-project-select]').forEach(initProjectPropertyLink);
+    document.querySelectorAll('[data-numeric]').forEach(initNumericInput);
+    document.querySelectorAll('[data-sqft-input]').forEach(initDirectAmountPreview);
+
+    // Clearing the form must also clear the selected member and the amount.
+    document.querySelectorAll('[data-sale-reset]').forEach((button) => {
+        button.addEventListener('click', () => {
+            setTimeout(() => {
+                const hidden = document.getElementById('member_id');
+                if (hidden) hidden.value = '';
+                document.querySelector('[data-member-selected]')?.classList.add('d-none');
+                document.querySelector('[data-sqft-input]')?.dispatchEvent(new Event('input'));
+                document.getElementById('member-search')?.focus();
+            }, 0);
+        });
+    });
 
     // A sale is irreversible once saved — make the operator acknowledge it.
     document.querySelectorAll('[data-confirm-submit]').forEach((button) => {

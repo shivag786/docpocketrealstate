@@ -56,11 +56,12 @@ class RegistrySaleController extends Controller
         return redirect()
             ->route('admin.sales.create')
             ->with('success', sprintf(
-                'Sale recorded: %s Sq.Ft. for %s (%s), registry %s.',
+                'Sale recorded: %s Sq.Ft. for %s (%s) — direct reward ₹%s.%s',
                 number_format((float) $sale->sqft, 2),
                 $sale->member->name,
                 $sale->member->member_code,
-                $sale->registry_reference,
+                number_format((float) $sale->sqft * (float) config('rewards.rates.direct'), 2),
+                $sale->registry_reference ? " Registry {$sale->registry_reference}." : '',
             ));
     }
 

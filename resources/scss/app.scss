@@ -273,6 +273,86 @@ body {
   }
 }
 
+// --- Sale entry ---------------------------------------------------------
+.sale-entry-card {
+  border-top: 3px solid $primary;
+}
+
+.selected-member {
+  border: 1px solid $success;
+  background: rgba(28, 124, 74, 0.06);
+  border-radius: $border-radius;
+  padding: 0.65rem 0.85rem;
+}
+
+.selected-member-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: $success;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+// Live direct-sale amount. Display only — the server is the source of truth.
+.direct-amount-box {
+  border: 1px dashed $gray-400;
+  border-radius: $border-radius;
+  padding: 0.6rem 0.9rem;
+  background: $gray-100;
+  min-height: calc(3.5rem + 2px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: border-color .15s ease, background .15s ease;
+
+  &.is-active {
+    border-style: solid;
+    border-color: $primary;
+    background: rgba(27, 77, 143, 0.06);
+
+    .direct-amount {
+      color: $primary;
+    }
+  }
+
+  .direct-amount {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.1;
+    color: $gray-500;
+  }
+
+  .direct-amount-formula {
+    font-size: .78rem;
+    color: $gray-600;
+  }
+}
+
+// Inputs carrying a number should read as numbers.
+input[data-numeric] {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+
+.accordion-button {
+  font-weight: 500;
+
+  &:not(.collapsed) {
+    background: rgba(27, 77, 143, 0.06);
+    color: $primary;
+    box-shadow: none;
+  }
+
+  &:focus {
+    box-shadow: none;
+    border-color: $gray-300;
+  }
+}
+
 // Loading state for AJAX-driven regions. Never freeze the whole page —
 // docs/04_UI_UX_SPECIFICATION.md.
 .is-loading {

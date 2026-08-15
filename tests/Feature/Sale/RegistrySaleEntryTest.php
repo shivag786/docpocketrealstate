@@ -181,13 +181,134 @@ class RegistrySaleEntryTest extends TestCase
     }
 
     #[Test]
-    public function required_fields_are_enforced(): void
+    public function only_member_and_sqft_are_required(): void
     {
+        // Client correction: project, property, registry number and registry
+        // date are optional supporting detail.
         $this->actingAs($this->admin)
             ->post(route('admin.sales.store'), [])
-            ->assertSessionHasErrors(['member_id', 'project_id', 'property_id', 'registry_reference', 'sqft']);
+            ->assertSessionHasErrors(['member_id', 'sqft'])
+            ->assertSessionDoesntHaveErrors(['project_id', 'property_id', 'registry_reference', 'registry_date']);
 
         $this->assertSame(0, RegistrySale::count());
+    }
+
+    #[Test]
+    public function a_sale_can_be_recorded_with_only_a_member_and_sqft(): void
+    {
+        $this->actingAs($this->admin)
+            ->post(route('admin.sales.store'), [
+                'member_id' => $this->member->id,
+                'sqft' => '1500.00',
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('admin.sales.create'));
+
+        $sale = RegistrySale::first();
+
+        $this->assertNotNull($sale);
+        $this->assertSame('1500.00', $sale->sqft);
+        $this->assertNull($sale->project_id);
+        $this->assertNull($sale->property_id);
+        $this->assertNull($sale->registry_reference);
+
+        // The reward month still resolves, using the entry day.
+        $this->assertSame(now()->format('Y-m'), $sale->period());
+    }
+
+    #[Test]
+    public function several_sales_may_omit_the_registry_number(): void
+    {
+        // A unique index would reject a second empty string; nulls must be fine.
+        foreach (['100.00', '200.00', '300.00'] as $sqft) {
+            $this->actingAs($this->admin)
+                ->post(route('admin.sales.store'), [
+                    'member_id' => $this->member->id,
+                    'sqft' => $sqft,
+                    'registry_reference' => '',
+                ])
+                ->assertSessionHasNoErrors();
+        }
+
+        $this->assertSame(3, RegistrySale::count());
+        $this->assertSame(3, RegistrySale::whereNull('registry_reference')->count());
+    }
+
+    #[Test]
+    public function optional_details_are_stored_when_supplied(): void
+    {
+        $this->actingAs($this->admin)
+            ->post(route('admin.sales.store'), $this->payload([
+                'notes' => 'Corner plot, paid in full',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $sale = RegistrySale::first();
+
+        $this->assertSame($this->project->id, $sale->project_id);
+        $this->assertSame($this->property->id, $sale->property_id);
+        $this->assertSame('REG-2026-0001', $sale->registry_reference);
+        $this->assertSame('Corner plot, paid in full', $sale->notes);
+    }
+
+    #[Test]
+    public function a_property_cannot_be_recorded_without_its_project(): void
+    {
+        $this->actingAs($this->admin)
+            ->post(route('admin.sales.store'), [
+                'member_id' => $this->member->id,
+                'sqft' => '100.00',
+                'property_id' => $this->property->id,
+            ])
+            ->assertSessionHasErrors('project_id');
+
+        $this->assertSame(0, RegistrySale::count());
+    }
+
+    #[Test]
+    public function a_project_may_be_recorded_without_a_property(): void
+    {
+        $this->actingAs($this->admin)
+            ->post(route('admin.sales.store'), [
+                'member_id' => $this->member->id,
+                'sqft' => '100.00',
+                'project_id' => $this->project->id,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $sale = RegistrySale::first();
+
+        $this->assertSame($this->project->id, $sale->project_id);
+        $this->assertNull($sale->property_id);
+    }
+
+    #[Test]
+    public function sqft_must_be_numeric(): void
+    {
+        foreach (['abc', '12abc', '1,500x', 'N/A', '--5'] as $value) {
+            $this->actingAs($this->admin)
+                ->post(route('admin.sales.store'), [
+                    'member_id' => $this->member->id,
+                    'sqft' => $value,
+                ])
+                ->assertSessionHasErrors('sqft');
+        }
+
+        $this->assertSame(0, RegistrySale::count());
+    }
+
+    #[Test]
+    public function a_thousands_separator_in_sqft_is_accepted(): void
+    {
+        // Operators type "1,500.50" out of habit; strip it rather than reject it.
+        $this->actingAs($this->admin)
+            ->post(route('admin.sales.store'), [
+                'member_id' => $this->member->id,
+                'sqft' => '1,500.50',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('1500.50', RegistrySale::first()->sqft);
     }
 
     #[Test]
@@ -226,6 +347,7 @@ class RegistrySaleEntryTest extends TestCase
     #[Test]
     public function a_property_from_a_different_project_is_rejected(): void
     {
+        // Optional does not mean unvalidated: a mismatched pair is still refused.
         $otherProject = Project::factory()->create();
 
         $this->actingAs($this->admin)

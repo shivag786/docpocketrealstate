@@ -68,6 +68,23 @@ class RegistrySaleFactory extends Factory
         ]);
     }
 
+    /**
+     * A minimal sale: member and Sq.Ft. only, which is all the form now requires.
+     */
+    public function withoutDetails(): static
+    {
+        return $this->state(fn () => [
+            'project_id' => null,
+            'property_id' => null,
+            'registry_reference' => null,
+        ])->afterMaking(function (RegistrySale $sale) {
+            // configure() backfills project_id from the property; undo that here.
+            $sale->project_id = null;
+            $sale->property_id = null;
+            $sale->registry_reference = null;
+        });
+    }
+
     public function sqft(float|string $sqft): static
     {
         return $this->state(fn () => ['sqft' => $sqft]);

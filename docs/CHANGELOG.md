@@ -31,6 +31,62 @@ Chronological project history. Claude must append an entry after each meaningful
 
 ---
 
+### 2026-08-15 — Correction — Simplified sale entry
+
+Client correction requested after Phase 5. Supersedes Phase 4 decision #3.
+
+**Changed**
+- Sale entry now requires only a member and a Sq.Ft. figure
+- The direct sale amount is shown live beside the Sq.Ft. field as the operator types
+  (display only — the server remains the financial source of truth)
+- Project, property, registry number, registry date and notes moved into a collapsed
+  "Property & registry details" accordion, which auto-opens if any of those fields has a
+  validation error so the operator can see what to fix
+- Form redesigned: larger inputs, icon-prefixed input groups, a highlighted selected-member
+  card, and a Clear button that also resets the member and the live amount
+- Sq.Ft. field is now numeric-only as it is typed — non-numeric keys are blocked, a
+  second decimal point is prevented, and the value is capped at 2 decimals
+
+**Database**
+- `registry_sales.project_id`, `property_id` and `registry_reference` are now nullable.
+  Foreign keys were dropped and re-added around the change; the existing sale row was
+  verified intact afterwards
+- `registry_reference` keeps its UNIQUE index — MySQL permits many NULLs, so it still
+  blocks duplicates whenever a number is supplied
+- `registry_date` deliberately stays NOT NULL: it decides the reward month, and the
+  application fills it with the entry day when the form omits it
+
+**Tests**
+- 7 new tests (195 total, 580 assertions, all passing)
+- Existing `required_fields_are_enforced` replaced by `only_member_and_sqft_are_required`,
+  which also asserts the now-optional fields raise no errors
+
+**Manual verification**
+- Recorded a sale from member RS4 with 2,000 Sq.Ft. and nothing else — stored with null
+  project, property and registry number, dated today, flash confirming
+  "direct reward ₹80,000.00"
+- `abc123` rejected: "Sq.Ft. must be a number — digits and a decimal point only."
+- A property submitted without a project rejected: "Select the project this property
+  belongs to."
+- Sales history and the sale detail page render correctly with the null details, falling
+  back to "#2" where a registry number would be
+
+**Issues**
+- **Risk accepted by the client:** the unique registry number was the duplicate-sale
+  guard. Sales entered without one have no duplicate protection, and because sales are
+  approved on entry and permanent, a double entry becomes a permanent double reward. No
+  replacement guard was invented — a same-member/same-Sq.Ft./same-day warning would be
+  the natural candidate but needs confirming as a business rule.
+
+**Decision**
+- Member + Sq.Ft. is the whole required form; all other sale detail is optional
+- Optional never means unvalidated — every supplied value is still checked
+
+**Next**
+- Phase 6 — Upline Reward. Still blocked on upline eligibility and the rounding rule.
+
+---
+
 ### 2026-08-15 — Phase 5 — Direct Reward Engine
 
 **Added**

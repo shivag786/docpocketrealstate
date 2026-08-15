@@ -27,14 +27,17 @@ class RegistrySaleService
      */
     public function record(array $data, User $enteredBy): RegistrySale
     {
-        $property = Property::with('project')->findOrFail($data['property_id']);
+        // Project and property are optional. When a property IS given, guard the
+        // pairing rather than trusting the submitted project_id — a stale or
+        // tampered form must not attach a sale to the wrong project.
+        if (! empty($data['property_id'])) {
+            $property = Property::findOrFail($data['property_id']);
 
-        // Guard the pairing rather than trusting the submitted project_id: a
-        // stale or tampered form must not attach a sale to the wrong project.
-        if ((int) $property->project_id !== (int) $data['project_id']) {
-            throw new RuntimeException(
-                'The selected property does not belong to the selected project.'
-            );
+            if ((int) $property->project_id !== (int) ($data['project_id'] ?? 0)) {
+                throw new RuntimeException(
+                    'The selected property does not belong to the selected project.'
+                );
+            }
         }
 
         return DB::transaction(function () use ($data, $enteredBy) {

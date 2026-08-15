@@ -1,11 +1,13 @@
 @extends('layouts.admin')
 
-@section('title', $sale->registry_reference)
-@section('page-title', 'Sale ' . $sale->registry_reference)
+@php $saleLabel = $sale->registry_reference ?? '#' . $sale->id; @endphp
+
+@section('title', $saleLabel)
+@section('page-title', 'Sale ' . $saleLabel)
 
 @section('breadcrumbs')
     <li class="breadcrumb-item"><a href="{{ route('admin.sales.index') }}">Sales</a></li>
-    <li class="breadcrumb-item active" aria-current="page">{{ $sale->registry_reference }}</li>
+    <li class="breadcrumb-item active" aria-current="page">{{ $saleLabel }}</li>
 @endsection
 
 @section('content')
@@ -19,7 +21,9 @@
                 <ul class="list-group list-group-flush small">
                     <li class="list-group-item d-flex justify-content-between">
                         <span class="text-muted">Registry number</span>
-                        <span class="fw-semibold">{{ $sale->registry_reference }}</span>
+                        <span class="fw-semibold">
+                            {{ $sale->registry_reference ?? '—' }}
+                        </span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between">
                         <span class="text-muted">Sq.Ft.</span>
@@ -40,14 +44,18 @@
                     <li class="list-group-item d-flex justify-content-between">
                         <span class="text-muted">Project</span>
                         <span>
-                            <a href="{{ route('admin.projects.show', $sale->project) }}" class="text-decoration-none">
-                                {{ $sale->project->name }}
-                            </a>
+                            @if ($sale->project)
+                                <a href="{{ route('admin.projects.show', $sale->project) }}" class="text-decoration-none">
+                                    {{ $sale->project->name }}
+                                </a>
+                            @else
+                                &mdash;
+                            @endif
                         </span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between">
-                        <span class="text-muted">Property / Site</span>
-                        <span>{{ $sale->property->property_code }}</span>
+                        <span class="text-muted">Property / Plot</span>
+                        <span>{{ $sale->property?->property_code ?? '—' }}</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between">
                         <span class="text-muted">Entered by</span>
