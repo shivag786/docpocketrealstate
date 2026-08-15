@@ -68,6 +68,8 @@ Route::middleware(['auth', 'active'])->group(function () {
                 Route::get('direct', [CalculationController::class, 'directLedger'])->name('direct.ledger');
                 Route::post('upline', [CalculationController::class, 'uplineRun'])->name('upline');
                 Route::get('upline', [CalculationController::class, 'uplineLedger'])->name('upline.ledger');
+                Route::get('upline/explain/{member}', [CalculationController::class, 'uplineExplain'])
+                    ->name('upline.explain');
                 Route::get('runs/{run}', [CalculationController::class, 'show'])->name('show');
             });
 

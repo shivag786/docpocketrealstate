@@ -273,6 +273,96 @@ body {
   }
 }
 
+// --- Upline explorer ----------------------------------------------------
+.upline-rule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+}
+
+.upline-rule-step {
+  border: 1px solid $gray-300;
+  border-radius: $border-radius;
+  padding: .45rem .7rem;
+  background: #fff;
+  flex: 1 1 170px;
+}
+
+.upline-rule-arrow {
+  color: $primary;
+  flex: 0 0 auto;
+}
+
+@include media-breakpoint-down(md) {
+  .upline-rule-arrow {
+    transform: rotate(90deg);
+    width: 100%;
+    text-align: center;
+  }
+}
+
+// Root → member hierarchy, drawn as an indented ladder.
+.hierarchy {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.hierarchy-item {
+  position: relative;
+  padding: .2rem 0;
+
+  @for $i from 1 through 12 {
+    &:nth-child(#{$i}) {
+      padding-left: #{($i - 1) * 1.5}rem;
+    }
+  }
+}
+
+.hierarchy-rail {
+  position: absolute;
+  left: -0.75rem;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed $gray-400;
+}
+
+.hierarchy-item:first-child .hierarchy-rail {
+  display: none;
+}
+
+.hierarchy-node {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  border: 1px solid $gray-300;
+  border-radius: $border-radius;
+  background: #fff;
+  padding: .35rem .6rem;
+
+  &.is-inactive {
+    background: $gray-100;
+    border-style: dashed;
+    color: $gray-600;
+  }
+
+  &.is-current {
+    border-color: $primary;
+    background: rgba(27, 77, 143, .07);
+  }
+}
+
+.hierarchy-level {
+  font-size: .7rem;
+  font-weight: 600;
+  color: $gray-600;
+  background: $gray-200;
+  border-radius: 3px;
+  padding: 0 .3rem;
+  margin-right: .25rem;
+}
+
 // --- Sale entry ---------------------------------------------------------
 .sale-entry-card {
   border-top: 3px solid $primary;

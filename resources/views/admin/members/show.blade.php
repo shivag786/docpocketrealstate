@@ -379,6 +379,10 @@
                 target achievement has no effect on this reward.
             </p>
 
+            <a href="{{ route('admin.calculations.upline.explain', $member) }}" class="btn btn-sm btn-outline-primary mb-3">
+                <i class="bi bi-diagram-3 me-1"></i>Open Upline Explorer
+            </a>
+
             @if ($uplineRewards->isEmpty())
                 <p class="text-muted mb-0">
                     <i class="bi bi-info-circle me-1"></i>

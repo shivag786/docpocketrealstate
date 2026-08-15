@@ -6,6 +6,7 @@ use App\Enums\CalculationRunType;
 use App\Enums\RewardType;
 use App\Http\Controllers\Controller;
 use App\Models\CalculationRun;
+use App\Models\Member;
 use App\Models\RewardLedger;
 use App\Models\UplineCalculation;
 use App\Services\CalculationRunService;
@@ -135,6 +136,32 @@ class CalculationController extends Controller
                 ->forPeriod($period)
                 ->selectRaw('COUNT(*) as entries, COALESCE(SUM(amount),0) as amount')
                 ->first(),
+        ]);
+    }
+
+    /**
+     * Upline Explorer — the whole rule for one member, in one page.
+     *
+     * Shows the path from the root down, the annotated chain above the member
+     * (who qualifies and why), what their own sales paid out, and what they
+     * received from their downline.
+     */
+    public function uplineExplain(Request $request, Member $member): View
+    {
+        $period = $request->query('period', now()->format('Y-m'));
+
+        return view('admin.calculations.upline-explain', [
+            'member' => $member,
+            'period' => $period,
+            'path' => $this->upline->pathFromRoot($member),
+            'chain' => $this->upline->annotatedChain($member),
+            'distribution' => $this->upline->distributionBySeller($member, $period),
+            'receipts' => $this->upline->receiptsFor($member, $period),
+            'periods' => UplineCalculation::query()
+                ->select('period')
+                ->distinct()
+                ->orderByDesc('period')
+                ->pluck('period'),
         ]);
     }
 

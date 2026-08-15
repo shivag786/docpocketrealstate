@@ -123,7 +123,13 @@
                                 </a>
                                 <div class="small text-muted">{{ $row->receiver->name }}</div>
                             </td>
-                            <td class="text-end fw-semibold">₹{{ number_format((float) $row->receiver_amount, 2) }}</td>
+                            <td class="text-end fw-semibold">
+                                ₹{{ number_format((float) $row->receiver_amount, 2) }}
+                                <a href="{{ route('admin.calculations.upline.explain', [$row->seller_id, 'period' => $period]) }}"
+                                   class="ms-2 text-decoration-none" title="Explain this distribution">
+                                    <i class="bi bi-diagram-3"></i>
+                                </a>
+                            </td>
                         </tr>
                     @empty
                         <tr>

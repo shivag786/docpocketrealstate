@@ -315,4 +315,109 @@ class UplineRewardService
             ->orderBy('upline_level')
             ->get();
     }
+
+    /**
+     * The chain above a member, annotated with why each ancestor does or does not
+     * qualify.
+     *
+     * This is the explanation surface for the whole rule: it shows the walk from
+     * the seller upward, which members were skipped for being inactive, which
+     * five qualified, and which fell beyond the limit.
+     *
+     * @return array<int, array{member: Member, depth: int, active: bool, eligible: bool, level: int|null, reason: string}>
+     */
+    public function annotatedChain(Member $seller): array
+    {
+        $max = (int) config('rewards.upline.max_levels', 5);
+
+        $chain = [];
+        $level = 0;
+        $depth = 0;
+
+        foreach ($seller->ancestors() as $ancestor) {
+            $depth++;
+            $active = $ancestor->isActive();
+            $eligible = false;
+            $assignedLevel = null;
+
+            if (! $active) {
+                $reason = 'Inactive — skipped, the walk continues upward';
+            } elseif ($level >= $max) {
+                $reason = 'Beyond the '.$max.'-upline limit';
+            } else {
+                $eligible = true;
+                $assignedLevel = ++$level;
+                $reason = 'Eligible — receives an equal share';
+            }
+
+            $chain[] = [
+                'member' => $ancestor,
+                'depth' => $depth,
+                'active' => $active,
+                'eligible' => $eligible,
+                'level' => $assignedLevel,
+                'reason' => $reason,
+            ];
+        }
+
+        return $chain;
+    }
+
+    /**
+     * What one member's OWN sales paid out in a period, and to whom.
+     *
+     * The member is the seller here: their Sq.Ft. created the pool.
+     *
+     * @return array{sqft: string, pool: string, count: int, share: string, rows: Collection<int, UplineCalculation>}
+     */
+    public function distributionBySeller(Member $seller, string $period): array
+    {
+        $rows = UplineCalculation::query()
+            ->forPeriod($period)
+            ->where('seller_id', $seller->id)
+            ->with('receiver:id,member_code,name,status')
+            ->orderBy('upline_level')
+            ->get();
+
+        $sqft = Money::of(
+            RegistrySale::query()
+                ->approved()
+                ->forPeriod($period)
+                ->where('member_id', $seller->id)
+                ->sum('sqft')
+        );
+
+        return [
+            'sqft' => $sqft,
+            'pool' => Money::multiply($sqft, RewardType::Upline->rate()),
+            'count' => $rows->count(),
+            'share' => $rows->first()?->receiver_amount ?? Money::zero(),
+            'rows' => $rows,
+        ];
+    }
+
+    /**
+     * What a member RECEIVED in a period, and from which sellers.
+     *
+     * @return Collection<int, UplineCalculation>
+     */
+    public function receiptsFor(Member $member, string $period): Collection
+    {
+        return UplineCalculation::query()
+            ->forPeriod($period)
+            ->where('receiver_id', $member->id)
+            ->with('seller:id,member_code,name')
+            ->orderByDesc('receiver_amount')
+            ->get();
+    }
+
+    /**
+     * The path from the outermost root down to a member.
+     *
+     * @return Collection<int, Member>
+     */
+    public function pathFromRoot(Member $member): Collection
+    {
+        return $member->ancestors()->reverse()->values();
+    }
 }
