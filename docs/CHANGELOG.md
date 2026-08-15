@@ -31,6 +31,70 @@ Chronological project history. Claude must append an entry after each meaningful
 
 ---
 
+### 2026-08-15 — Phase 5 — Direct Reward Engine
+
+**Added**
+- `DirectRewardService` — own approved sale Sq.Ft. × ₹40, writing one ledger row per
+  sale so every rupee traces to a specific registry
+- `App\Support\Money` — exact decimal arithmetic over bcmath, values passed as strings.
+  `divide()` is deliberately absent until the upline rounding rule is confirmed
+- `CalculationRunService` — period validation, duplicate protection, transactional
+  execution, and failure recording that survives the rollback
+- `calculation_runs` and `reward_ledger` tables with `RewardType`, `LedgerStatus`,
+  `CalculationRunType` and `CalculationRunStatus` enums
+- Calculation Center rendering all five controls from the UI spec, with Direct wired and
+  the rest labelled by delivering phase
+- Period preview showing what a run would produce before committing it
+- Run detail page and a direct reward ledger grouped by member
+- Direct Reward tab activated on the member profile
+
+**Changed**
+- Sidebar: Calculations enabled
+- Member profile passes calculated direct rewards through
+
+**Database**
+- `reward_ledger` stores `sqft`, `rate` and `amount` as DECIMAL, with the rate frozen per
+  row so historical runs stay reproducible if a configured rate ever changes
+- Unique index `reward_ledger(member_id, reward_type, source_type, source_id)` — the
+  database itself makes paying the same source twice impossible
+- Ledger and run foreign keys are `restrictOnDelete`; no financial row can be orphaned
+
+**Tests**
+- 49 new tests (188 total, 541 assertions, all passing) — the first unit tests in the
+  project
+- Acceptance cases from `06_TESTING_AND_ACCEPTANCE.md` verified exactly: 1,500 × 40 =
+  60,000, and multiple sales summed (1,750.50 → 70,020.00)
+- Target independence is enforced two ways: a behavioural test, and a structural test
+  asserting `DirectRewardService` has no reference to the Target or Team services
+- Float-error cases pinned: 0.1 + 0.2 = 0.30, and 27.625 × 40 = 1105.00 where a float
+  yields 1104.9999999999998
+
+**Manual verification**
+- Calculation Center previewed 2026-08 as 1,500.00 Sq.Ft. → ₹60,000.00 without writing
+  anything
+- Running it produced run #1 (completed, 1 entry) and one ledger row:
+  member RS1, source `registry_sale #1`, sqft 1500.00, rate 40.00, amount 60000.00
+- A second run was refused — "has already been calculated for 2026-08" — with the ledger
+  still holding exactly one row
+- Run detail, direct ledger and the member profile tab all show ₹60,000.00
+
+**Issues**
+- None found in this phase.
+
+**Decision**
+- One ledger row per sale rather than per member per period, for traceability
+- `calculation_runs` and `reward_ledger` built now (nominally Phases 12/13) because the
+  Direct engine needed somewhere to write. `CalculationRunService` is the minimum
+  lifecycle; Phase 12 extends it without changing the contract
+- Recalculation is not available yet: a completed run blocks a second one for the same
+  period and type. Controlled recalculation is Phase 12.
+
+**Next**
+- Phase 6 — Upline Reward. **BLOCKED** on two answers: what makes an upline "eligible",
+  and the rounding rule when the pool divides unevenly. Both change payout amounts.
+
+---
+
 ### 2026-08-15 — Phase 4 — Projects, Properties & Registry Sales
 
 **Added**

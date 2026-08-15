@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\CalculationController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\MemberController;
 use App\Http\Controllers\Admin\ProjectController;
@@ -58,6 +59,15 @@ Route::middleware(['auth', 'active'])->group(function () {
             Route::post('sales', [RegistrySaleController::class, 'store'])->name('sales.store');
             Route::get('sales', [RegistrySaleController::class, 'index'])->name('sales.index');
             Route::get('sales/{sale}', [RegistrySaleController::class, 'show'])->name('sales.show');
+
+            // Calculation Center. Phase 5 wires the Direct engine only; the
+            // other three engines and "Calculate All" arrive in Phase 12.
+            Route::prefix('calculations')->name('calculations.')->group(function () {
+                Route::get('/', [CalculationController::class, 'index'])->name('index');
+                Route::post('direct', [CalculationController::class, 'direct'])->name('direct');
+                Route::get('direct', [CalculationController::class, 'directLedger'])->name('direct.ledger');
+                Route::get('runs/{run}', [CalculationController::class, 'show'])->name('show');
+            });
 
             // Sponsor tree. Nodes and search are AJAX; the downline listing is a
             // paginated page because a branch can hold thousands of members.

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Member\StoreMemberRequest;
 use App\Http\Requests\Member\UpdateMemberRequest;
 use App\Models\Member;
+use App\Services\DirectRewardService;
 use App\Services\MemberService;
 use App\Services\MemberTreeService;
 use Illuminate\Http\RedirectResponse;
@@ -80,6 +81,7 @@ class MemberController extends Controller
                 ->paginate(config('members.per_page'), ['*'], 'referrals')
                 ->withQueryString(),
             'deletionBlockers' => $this->members->deletionBlockers($member),
+            'directRewards' => app(DirectRewardService::class)->forMember($member),
         ]);
     }
 

@@ -21,7 +21,7 @@
             ['label' => 'Sales History', 'icon' => 'bi-clock-history', 'route' => 'admin.sales.index', 'active' => 'admin.sales.index', 'phase' => 4],
         ],
         'Rewards' => [
-            ['label' => 'Calculations', 'icon' => 'bi-calculator', 'route' => null, 'phase' => 12],
+            ['label' => 'Calculations', 'icon' => 'bi-calculator', 'route' => 'admin.calculations.index', 'active' => 'admin.calculations.*', 'phase' => 12],
             ['label' => 'Targets', 'icon' => 'bi-bullseye', 'route' => null, 'phase' => 8],
             ['label' => 'Upline Rewards', 'icon' => 'bi-arrow-up-circle', 'route' => null, 'phase' => 6],
             ['label' => 'Company Club', 'icon' => 'bi-award', 'route' => null, 'phase' => 11],

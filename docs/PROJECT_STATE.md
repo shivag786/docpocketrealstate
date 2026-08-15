@@ -4,26 +4,26 @@ This is the single source of truth for current development progress.
 Claude MUST update it after every task/phase.
 
 ## Current phase
-Phase 4 — Projects/Properties/Registry Sales
+Phase 5 — Direct Reward
 
 ## Current status
 COMPLETE — awaiting client sign-off
 
 ## Last completed task
-Phase 4 — Projects, Properties/Sites and Registry Sales.
+Phase 5 — Direct Reward engine, calculation runs and reward ledger.
 
 ## Last update
-2026-08-15 17:40
+2026-08-15 19:20
 
 ## Current objective
-Admin can enter and find registry-confirmed Sq.Ft. sales. **Achieved.**
+Direct reward and ledger are correct. **Achieved.**
 
 ## Completed phases
 - [x] Phase 1 — Foundation
 - [x] Phase 2 — Members & Sponsor
 - [x] Phase 3 — Tree & Network UX
 - [x] Phase 4 — Projects/Properties/Registry Sales
-- [ ] Phase 5 — Direct Reward
+- [x] Phase 5 — Direct Reward
 - [ ] Phase 6 — Upline
 - [ ] Phase 7 — Team Sales
 - [ ] Phase 8 — Target 1
@@ -38,7 +38,52 @@ Admin can enter and find registry-confirmed Sq.Ft. sales. **Achieved.**
 - [ ] Phase 17 — QA/Deployment
 
 ## Current task
-None. Phase 4 delivered; Phase 5 not started.
+None. Phase 5 delivered; Phase 6 not started (and blocked — see below).
+
+## Phase 5 notes
+
+**Ledger granularity.** One ledger row per approved sale, not one per member per
+period. `source_type='registry_sale'` + `source_id` means every rupee traces to a
+specific registry, which is what makes Phase 13 reconciliation possible. Member totals
+are sums over those rows.
+
+**Exact decimal arithmetic.** `App\Support\Money` wraps bcmath and passes every value
+as a string. No float exists between reading `sqft` from the database and writing
+`amount` to the ledger. `Money::divide()` is deliberately ABSENT — the upline rounding
+rule is unconfirmed, and a test asserts the method does not exist so it cannot be added
+casually.
+
+**The rate is frozen onto every ledger row.** Changing `config('rewards.rates.direct')`
+later cannot alter a historical amount. Tested.
+
+**Duplicate protection has two layers.** The run guard refuses a second completed run
+for the same period+type (re-checked inside the transaction). The unique index
+`reward_ledger(member_id, reward_type, source_type, source_id)` is the hard backstop —
+even if the guard were bypassed, the database refuses to pay the same source twice.
+
+**Scope taken slightly early, deliberately:** `calculation_runs` and `reward_ledger`
+(nominally Phases 12/13) had to exist for the Direct engine to write anywhere.
+`CalculationRunService` is the minimum lifecycle needed — Phase 12 adds Calculate All,
+recalculation and run-history UI on top of the same contract without changing it.
+
+## Files changed in Phase 5
+**Created**
+- `app/Support/Money.php`
+- `app/Enums/RewardType.php`, `LedgerStatus.php`, `CalculationRunType.php`,
+  `CalculationRunStatus.php`
+- `app/Models/CalculationRun.php`, `RewardLedger.php`
+- `app/Services/CalculationRunService.php`, `DirectRewardService.php`
+- `app/Http/Controllers/Admin/CalculationController.php`
+- 2 migrations (`calculation_runs`, `reward_ledger`)
+- `resources/views/admin/calculations/index.blade.php`, `show.blade.php`, `direct.blade.php`
+- `tests/Unit/MoneyTest.php`
+- `tests/Feature/Reward/DirectRewardTest.php`, `CalculationRunTest.php`,
+  `CalculationCenterTest.php`
+
+**Modified**
+- `routes/web.php`, sidebar (Calculations enabled)
+- `app/Http/Controllers/Admin/MemberController.php` — supplies direct rewards
+- `resources/views/admin/members/show.blade.php` — Direct Reward tab activated
 
 ## Phase 4 decisions (client-confirmed 2026-08-15)
 1. **Entry is approval.** A sale counts from the moment it is recorded. There is no
@@ -221,7 +266,28 @@ level 2. RS8 (Deepak Joshi) and RS9 (Priya Nair) were created by Claude during P
 verification and can be deleted if unwanted.
 
 ## Tests
-139 passed, 407 assertions, 0 failures (PHPUnit 12.5.33, ~13 s).
+188 passed, 541 assertions, 0 failures (PHPUnit 12.5.33, ~12 s).
+**First unit tests appear in this phase** (`tests/Unit/MoneyTest.php`).
+
+**Phase 5 (49)**
+- Money (unit, 11): 1,500 × 40 = 60,000 and the other rate combinations exactly;
+  0.1 + 0.2 = 0.30; 27.625 × 40 = 1105.00 where a float gives 1104.9999999999998;
+  100 × 0.01 sums to exactly 1.00; comparisons; non-numeric rejected; `divide()` absent
+- Direct engine (12): the 1,500 → 60,000 acceptance case; multiple sales summed
+  (1,750.50 → 70,020.00); one traceable row per sale; downline sales excluded;
+  **target status has no effect**; a structural test asserting the engine has no
+  dependency on the Target/Team services at all; period isolation; period follows
+  registry_date; empty period yields an empty completed run; rate frozen on the row;
+  run traceability; decimal exactness (2,234.56 → 89,382.40)
+- Calculation runs (13): first run succeeds; identical second run refused; no extra
+  ledger rows on refusal; the database itself rejects a duplicate source;
+  different periods each calculable; failed run rolls back completely; failure recorded
+  as a separate visible run; a failed run does not block a later success; run totals
+  reconcile to the ledger; invalid and future periods rejected; current month allowed
+- Calculation Center (10): guests blocked; preview writes nothing; run works; duplicate
+  refused with a message; invalid period rejected by the form; run page lists entries;
+  direct ledger grouped by member; later engines shown as unavailable; member profile
+  Direct Reward tab; empty state
 
 **Phase 4 (41)**
 - Sale entry: guests blocked, sale recorded, approved immediately, operator stored and
@@ -289,8 +355,13 @@ protection, mid-session deactivation, AJAX envelope contract.
 - Vite production build succeeds
 
 ## Known issues/blockers
-**Phase 5 is blocked** on the upline eligibility question only for Phase 6; Phase 5
-(Direct Reward) itself has no outstanding questions and can start immediately.
+**Phase 6 (Upline) is BLOCKED** on two answers — questions 3 and 4 below. Both change
+payout amounts, so neither can be assumed:
+- what makes an upline "eligible" (now narrowed: is an Inactive member counted as one of
+  the five, skipped so the walk continues past them, or does the chain stop there?)
+- the rounding rule when the pool divides unevenly
+
+No defects were found during Phase 5.
 
 **Defect found and fixed during Phase 4**
 - `RegistrySaleFactory` could produce a `sale_date` later than its `registry_date` when
@@ -325,8 +396,8 @@ Notes:
    issue, cosmetic, does not affect output.
 
 ## Business questions pending
-Grouped by the phase they block. **Phase 5 (Direct Reward) is not blocked by any of
-these and can start immediately.**
+Grouped by the phase they block. **Phase 6 cannot start until questions 3 and 4 are
+answered.**
 
 Resolved in Phase 2: member code format, root members, sponsor re-parenting policy and
 member status values — see "Phase 2 decisions" above.
@@ -361,11 +432,17 @@ editability — see "Phase 4 decisions" above.
     member login later is additive and does not invalidate Phase 1.
 
 ## Last known good state
-Phase 4 complete. Projects and properties/sites with integrity guards, daily registry
-sale entry with duplicate protection, and searchable/filterable sales history. Sales are
-approved on entry, dated by registry date, and permanent. 139 passing tests. Committed
-to git.
+Phase 5 complete. The first reward engine is live: Direct Sale at own approved Sq.Ft. ×
+₹40, writing one traceable ledger row per sale inside a transactional calculation run,
+with two independent layers of duplicate protection and exact decimal arithmetic. 188
+passing tests. Committed to git.
 
-The sale table is now the source every reward engine reads from. Phase 5 onward must go
-through `RegistrySale::approved()` and `RegistrySale::forPeriod()` rather than querying
-the table directly, so "approved" and "period" each stay defined in exactly one place.
+Verified live: RS1's 1,500 Sq.Ft. sale produced exactly ₹60,000 in run #1, and a second
+run attempt was refused with the ledger unchanged.
+
+Contracts later engines must follow:
+- read sales via `RegistrySale::approved()` and `::forPeriod()` — never the table directly
+- do arithmetic through `App\Support\Money` — never PHP floats
+- write through `CalculationRunService::execute()` so every amount has a run, a source
+  and a frozen rate
+- keep the four engines independent; never derive one from another

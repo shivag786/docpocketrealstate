@@ -51,6 +51,7 @@
             ['upline', 'Sponsor / Upline', 'bi-arrow-up-circle', null],
             ['team', 'Direct Team', 'bi-people', null],
             ['tree', 'Full Tree', 'bi-diagram-3', null],
+            ['direct', 'Direct Reward', 'bi-cash-coin', null],
         ] as [$id, $label, $icon, $phase])
             <li class="nav-item" role="presentation">
                 <button class="nav-link {{ $loop->first ? 'active' : '' }}"
@@ -65,7 +66,6 @@
 
         @foreach ([
             ['Sales', 'bi-receipt', 4],
-            ['Direct Reward', 'bi-cash-coin', 5],
             ['Upline Reward', 'bi-arrow-up-circle', 6],
             ['Targets', 'bi-bullseye', 8],
             ['Reward Ledger', 'bi-journal-text', 13],
@@ -315,6 +315,57 @@
                     The tree loads one level at a time, so a large branch never arrives in a
                     single response.
                 </p>
+            @endif
+        </div>
+
+        {{-- Direct Reward --}}
+        <div class="tab-pane fade" id="tab-direct" role="tabpanel">
+            <p class="small text-muted">
+                Own approved sale Sq.Ft. &times; ₹{{ config('rewards.rates.direct') }}.
+                Downline sales are not included, and target achievement has no effect on
+                this reward.
+            </p>
+
+            @if ($directRewards->isEmpty())
+                <p class="text-muted mb-0">
+                    <i class="bi bi-info-circle me-1"></i>
+                    No direct reward has been calculated for this member yet.
+                    <a href="{{ route('admin.calculations.index') }}">Open the Calculation Center</a>.
+                </p>
+            @else
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Period</th>
+                                <th class="text-end">Sales</th>
+                                <th class="text-end">Own Sq.Ft.</th>
+                                <th class="text-end">Direct reward</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($directRewards as $row)
+                                <tr>
+                                    <td>
+                                        <a href="{{ route('admin.calculations.direct.ledger', ['period' => $row->period]) }}"
+                                           class="text-decoration-none">{{ $row->period }}</a>
+                                    </td>
+                                    <td class="text-end">{{ number_format($row->entries) }}</td>
+                                    <td class="text-end">{{ number_format((float) $row->sqft, 2) }}</td>
+                                    <td class="text-end fw-semibold">₹{{ number_format((float) $row->amount, 2) }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <th>Total</th>
+                                <th class="text-end">{{ number_format($directRewards->sum('entries')) }}</th>
+                                <th class="text-end">{{ number_format((float) $directRewards->sum('sqft'), 2) }}</th>
+                                <th class="text-end">₹{{ number_format((float) $directRewards->sum('amount'), 2) }}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
             @endif
         </div>
     </div>
