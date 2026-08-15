@@ -4,23 +4,23 @@ This is the single source of truth for current development progress.
 Claude MUST update it after every task/phase.
 
 ## Current phase
-Phase 1 — Foundation
+Phase 2 — Members & Sponsor
 
 ## Current status
 COMPLETE — awaiting client sign-off
 
 ## Last completed task
-Phase 1 — Foundation and Admin Authentication.
+Phase 2 — Member Management and Sponsor assignment.
 
 ## Last update
-2026-08-15 13:05
+2026-08-15 14:05
 
 ## Current objective
-Set up and verify Laravel foundation and Admin authentication. **Achieved.**
+Members can be created safely under a sponsor. **Achieved.**
 
 ## Completed phases
 - [x] Phase 1 — Foundation
-- [ ] Phase 2 — Members & Sponsor
+- [x] Phase 2 — Members & Sponsor
 - [ ] Phase 3 — Tree & Network UX
 - [ ] Phase 4 — Projects/Properties/Registry Sales
 - [ ] Phase 5 — Direct Reward
@@ -38,7 +38,24 @@ Set up and verify Laravel foundation and Admin authentication. **Achieved.**
 - [ ] Phase 17 — QA/Deployment
 
 ## Current task
-None. Phase 1 delivered; Phase 2 not started.
+None. Phase 2 delivered; Phase 3 not started.
+
+## Phase 2 decisions (client-confirmed 2026-08-15)
+1. **Member ID** — admin-settable prefix + plain sequential number (`RS1`, `RS2`, …).
+   Configured in `config/members.php`; zero-padding optional and off by default.
+   A separate `sequence_number` column backs the numbering, so changing the prefix
+   continues the sequence instead of restarting or colliding. Issued codes are never
+   rewritten.
+2. **Root members** — `sponsor_id` is nullable and multiple independent trees are
+   allowed. This is what produces the documented "0 eligible uplines" case.
+3. **Sponsor changes** — permitted only while the member has no sales. Enforced through
+   the single `Member::canChangeSponsor()` method, which Phase 4 tightens once
+   `registry_sales` exists.
+4. **Member status** — Active / Inactive only.
+
+Assumptions applied (not separately confirmed): mobile required and unique; email
+optional but unique when present; address optional; `joining_date` required and not in
+the future; deletion blocked while direct referrals remain.
 
 ## Environment
 | Item | Value |
@@ -52,7 +69,28 @@ None. Phase 1 delivered; Phase 2 not started.
 | Dev server | `php artisan serve --port=8001` (port 8000 is taken by the `global_life_new` project) |
 | Version control | git initialised in project root |
 
-## Files changed in current phase
+## Files changed in Phase 2
+**Created**
+- `app/Enums/MemberStatus.php`
+- `app/Models/Member.php`
+- `app/Rules/ValidSponsor.php`
+- `app/Services/MemberCodeGenerator.php`, `app/Services/MemberService.php`
+- `app/Http/Controllers/Admin/MemberController.php`
+- `app/Http/Controllers/Admin/SponsorSearchController.php`
+- `app/Http/Requests/Member/StoreMemberRequest.php`, `UpdateMemberRequest.php`
+- `config/members.php`
+- `database/migrations/2026_08_15_120000_create_members_table.php`
+- `database/factories/MemberFactory.php`
+- `resources/js/sponsor-picker.js`
+- `resources/views/admin/members/{index,create,edit,show,_form}.blade.php`
+- `tests/Feature/Member/{MemberCrudTest,SponsorValidationTest,MemberCodeTest,SponsorSearchTest}.php`
+
+**Modified**
+- `routes/web.php` — member resource routes + sponsor search endpoint
+- `resources/js/app.js` — imports the sponsor picker module
+- `resources/views/layouts/partials/sidebar.blade.php` — Members enabled, wildcard active state
+
+## Files changed in Phase 1
 **Created**
 - `app/Enums/UserRole.php`, `app/Enums/UserStatus.php`
 - `app/Support/ApiResponse.php`
@@ -92,35 +130,63 @@ None. Phase 1 delivered; Phase 2 not started.
 
 ## Database/migration status
 Migrated. Tables: `users`, `password_reset_tokens`, `sessions`, `cache`, `cache_locks`,
-`jobs`, `job_batches`, `failed_jobs`, `migrations`.
+`jobs`, `job_batches`, `failed_jobs`, `migrations`, `members`.
 
-`users` carries `role` (default `manager`, indexed) and `status` (default `active`,
-indexed) plus `last_login_at`. No business tables yet — those start in Phase 2.
+`users` carries `role` (default `manager`, indexed), `status` (default `active`, indexed)
+and `last_login_at`.
+
+`members` matches the documented schema plus a `sequence_number` column backing the
+member code. Unique: `member_code`, `sequence_number`, `mobile`, `email`. Indexed:
+`sponsor_id` (FK), `status`, `joining_date`, `(status, sponsor_id)`. Soft deletes enabled.
 
 Seeded: `admin@realstate.test` / `Admin@12345` (role `admin`). **Change before production.**
 
-## Tests
-23 passed, 72 assertions, 0 failures (PHPUnit 12.5.33, ~3.5 s).
+Sample data left in the development database from manual verification: RS1 Rahul Sharma
+(root), RS2 Amit Verma and RS3 Sunita Rao (both sponsored by RS1). Useful for Phase 3
+tree work; delete if a clean start is preferred.
 
-- Login: render, admin auth, manager auth, wrong password, inactive user blocked,
-  required fields, login timestamp, rate limiting, logout, guest-redirect
-- Dashboard access: guest redirect, admin access, manager access, mid-session
-  deactivation logout, root redirect, reward rates displayed, no fabricated figures
-- AJAX conventions: success envelope, error envelope, 422 validation, 401 instead of
-  redirect, 404 envelope, deactivated user 401
+## Tests
+61 passed, 184 assertions, 0 failures (PHPUnit 12.5.33, ~4.8 s).
+
+**Phase 1 (23)** — login, inactive-account rejection, rate limiting, role/auth route
+protection, mid-session deactivation, AJAX envelope contract.
+
+**Phase 2 (38)**
+- Member CRUD: list, create with and without a sponsor, required fields, mobile
+  uniqueness, optional-but-unique email, future joining date rejected, update,
+  member code immutable through the form, soft delete, delete blocked while referrals
+  remain, direct referral listing, search and status filtering
+- Sponsor validation: valid sponsor accepted, self-sponsor blocked, direct referral
+  blocked as sponsor, deep descendant blocked, nonexistent sponsor rejected, sibling
+  allowed, ancestor chain order and limiting, descendant collection
+- Member code: sequential with configured prefix, prefix configurable, padding
+  configurable, prefix change continues numbering without rewriting issued codes,
+  soft-deleted member does not release its code, configurable start number,
+  uniqueness across 25 members
+- Sponsor search: guests rejected, standard envelope, findable by name/code/mobile,
+  short query returns nothing, results capped, edited member and its downline excluded
 
 ## Manual verification
-- `GET /` → 302 → `/admin/dashboard` → 302 → `/login` for guests
-- Login as `admin@realstate.test` → 302 → `/admin/dashboard` → 200
-- Dashboard renders operator name, role, the four confirmed rates from `config/rewards.php`,
-  and blank KPI tiles labelled with their delivering phase
+**Phase 1**
+- Guest → `/admin/dashboard` redirects to `/login`; login redirects to the dashboard
 - `last_login_at` written on successful login (verified in database)
-- Unauthenticated AJAX returns `{"success":false,"message":"Authentication required.",...}` with 401
-- `/up` health endpoint returns 200
-- Vite production build succeeds (317 kB CSS, 84 kB JS, icon fonts bundled)
+- Unauthenticated AJAX returns the standard envelope with 401; `/up` returns 200
+
+**Phase 2** (over HTTP against the running application)
+- Created root member RS1, then RS2 and RS3 beneath it; codes issued as plain
+  sequential values with the configured `RS` prefix
+- Self-sponsorship rejected with "A member cannot be their own sponsor."
+- Circular assignment (RS1 sponsored by its own child RS2) rejected with a
+  "circular relationship" message
+- Member detail shows Root badge, Team Leader = Yes, both direct referrals, the
+  upline chain with level numbers, and a blocked delete button with its reason
+- AJAX sponsor search returns the standard envelope; excluding a member also removes
+  its entire downline from results
+- List search and status filter both narrow correctly; sidebar highlights Members
+- Vite production build succeeds
 
 ## Known issues/blockers
-None blocking Phase 2.
+None blocking Phase 3.
 
 Notes:
 1. Port 8000 is occupied by long-running `global_life_new` dev servers. This project
@@ -131,7 +197,10 @@ Notes:
    issue, cosmetic, does not affect output.
 
 ## Business questions pending
-Grouped by the phase they block. **Phase 2 is not blocked by any of these.**
+Grouped by the phase they block. **Phase 3 is not blocked by any of these.**
+
+Resolved in Phase 2: member code format, root members, sponsor re-parenting policy and
+member status values — see "Phase 2 decisions" above.
 
 **Before Phase 4 (Registry Sales)**
 1. Which `registry_sales.status` values count as "approved", and is entry by an admin
@@ -166,5 +235,6 @@ Grouped by the phase they block. **Phase 2 is not blocked by any of these.**
     member login later is additive and does not invalidate Phase 1.
 
 ## Last known good state
-Phase 1 complete. Laravel 13.25 foundation, admin authentication, Bootstrap 5 admin
-shell, AJAX/validation conventions, 23 passing tests. Committed to git.
+Phase 2 complete. Member management with unique member codes, sponsor assignment via
+AJAX search, self-sponsor and circular protection, direct referral listing, soft deletes
+with tree-integrity guards. 61 passing tests. Committed to git.

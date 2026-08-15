@@ -31,6 +31,65 @@ Chronological project history. Claude must append an entry after each meaningful
 
 ---
 
+### 2026-08-15 — Phase 2 — Member Management & Sponsor Assignment
+
+**Added**
+- `Member` model with soft deletes, sponsor/direct-referral relationships, `ancestors()`
+  and `descendantIds()` tree walks, and search/active/roots scopes
+- `MemberStatus` enum (Active / Inactive)
+- Member CRUD: list with server-side search, status and position filters and pagination;
+  create; edit; detail page with member card, upline chain and direct referral listing
+- `MemberCodeGenerator` — allocates codes under a row lock inside the creating
+  transaction, with unique constraints as the backstop and a retry on a lost race
+- `MemberService` — creation, update and deletion rules in one place
+- `ValidSponsor` validation rule — blocks self-sponsorship and any sponsor drawn from
+  the member's own downline, at any depth
+- AJAX sponsor search endpoint returning a capped, ranked list; the edited member and
+  its whole downline are excluded from results
+- `sponsor-picker.js` — debounced search with request cancellation, built on the
+  Phase 1 `App.request` helper
+- `config/members.php` — member code prefix, padding, start number, and listing limits
+
+**Changed**
+- Sidebar: Members enabled; navigation active state now matches child routes
+- `resources/js/app.js` imports the sponsor picker module
+
+**Database**
+- New `members` table: the documented columns plus `sequence_number` backing the member
+  code. Unique on `member_code`, `sequence_number`, `mobile`, `email`. Indexed on
+  `sponsor_id`, `status`, `joining_date` and `(status, sponsor_id)`. Soft deletes.
+
+**Tests**
+- 38 new tests (61 total, 184 assertions, all passing)
+- Covers CRUD and validation, the full sponsor-validation matrix required by
+  `06_TESTING_AND_ACCEPTANCE.md`, member code generation including prefix changes and
+  soft-deleted codes, and the sponsor search endpoint
+
+**Manual verification**
+- RS1 created as a root member; RS2 and RS3 created beneath it
+- Self-sponsorship and circular assignment both rejected with clear messages
+- Member detail shows the Root badge, Team Leader status, referral list, upline chain
+  with level numbers, and a blocked delete with its reason
+- Sponsor search returns the standard envelope and excludes the downline correctly
+
+**Issues**
+- One defect found and fixed during the phase: `MemberService::create()` passed
+  `member_code` and `sequence_number` through `Member::create()`, but both are
+  deliberately excluded from `#[Fillable]` so no form can alter them, so mass assignment
+  silently dropped them. The service now assigns them directly after `fill()`.
+
+**Decision**
+- Member ID = admin-settable prefix + plain sequential number; issued codes are permanent
+- Root members allowed, multiple independent trees permitted
+- Sponsor changes allowed only while the member has no sales, enforced through a single
+  `canChangeSponsor()` extension point that Phase 4 will tighten
+- Member statuses limited to Active and Inactive
+
+**Next**
+- Phase 3 — Sponsor Tree & Network UX with AJAX lazy loading. Not started.
+
+---
+
 ### 2026-08-15 — Phase 1 — Foundation & Admin Authentication
 
 **Added**

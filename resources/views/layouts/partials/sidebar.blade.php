@@ -11,7 +11,7 @@
             ['label' => 'Dashboard', 'icon' => 'bi-speedometer2', 'route' => 'admin.dashboard', 'phase' => 1],
         ],
         'Network' => [
-            ['label' => 'Members', 'icon' => 'bi-people', 'route' => null, 'phase' => 2],
+            ['label' => 'Members', 'icon' => 'bi-people', 'route' => 'admin.members.index', 'active' => 'admin.members.*', 'phase' => 2],
             ['label' => 'Sponsor Tree', 'icon' => 'bi-diagram-3', 'route' => null, 'phase' => 3],
         ],
         'Sales' => [
@@ -46,10 +46,12 @@
             <div class="nav-section">{{ $section }}</div>
 
             @foreach ($items as $item)
+                @php $isActive = $item['route'] && request()->routeIs($item['active'] ?? $item['route']); @endphp
+
                 @if ($item['route'])
                     <a href="{{ route($item['route']) }}"
-                       class="nav-link {{ request()->routeIs($item['route']) ? 'active' : '' }}"
-                       @if (request()->routeIs($item['route'])) aria-current="page" @endif>
+                       class="nav-link {{ $isActive ? 'active' : '' }}"
+                       @if ($isActive) aria-current="page" @endif>
                         <i class="bi {{ $item['icon'] }}"></i>
                         <span>{{ $item['label'] }}</span>
                     </a>
