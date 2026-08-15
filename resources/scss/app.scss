@@ -188,6 +188,91 @@ body {
   }
 }
 
+// --- Sponsor tree -------------------------------------------------------
+.tree-node {
+  position: relative;
+}
+
+.tree-children {
+  margin-left: 1.35rem;
+  padding-left: 1rem;
+  border-left: 1px dashed $gray-400;
+}
+
+.tree-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  margin: 0.25rem 0;
+  border: 1px solid $gray-300;
+  border-radius: $border-radius;
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    border-color: $primary;
+    box-shadow: 0 1px 4px rgba(27, 77, 143, 0.12);
+  }
+
+  .tree-identity {
+    min-width: 0;
+    flex: 1 1 auto;
+
+    > span,
+    > a {
+      overflow-wrap: anywhere;
+    }
+  }
+
+  .tree-stats,
+  .tree-actions {
+    flex: 0 0 auto;
+  }
+}
+
+.tree-toggle {
+  flex: 0 0 auto;
+  padding: 0 0.25rem;
+  line-height: 1;
+  border: 0;
+  background: transparent;
+  color: $primary;
+
+  &:hover:not(:disabled) {
+    color: shade-color($primary, 20%);
+  }
+}
+
+@include media-breakpoint-down(md) {
+  .tree-card {
+    flex-wrap: wrap;
+
+    .tree-identity {
+      flex: 1 1 100%;
+      order: 1;
+    }
+
+    .tree-toggle {
+      order: 0;
+    }
+
+    .tree-stats {
+      order: 2;
+    }
+
+    .tree-actions {
+      order: 3;
+      margin-left: auto;
+    }
+  }
+
+  .tree-children {
+    margin-left: 0.5rem;
+    padding-left: 0.6rem;
+  }
+}
+
 // Loading state for AJAX-driven regions. Never freeze the whole page —
 // docs/04_UI_UX_SPECIFICATION.md.
 .is-loading {

@@ -4,24 +4,24 @@ This is the single source of truth for current development progress.
 Claude MUST update it after every task/phase.
 
 ## Current phase
-Phase 2 — Members & Sponsor
+Phase 3 — Tree & Network UX
 
 ## Current status
 COMPLETE — awaiting client sign-off
 
 ## Last completed task
-Phase 2 — Member Management and Sponsor assignment.
+Phase 3 — Sponsor Tree and Network UX with AJAX lazy loading.
 
 ## Last update
-2026-08-15 14:05
+2026-08-15 15:10
 
 ## Current objective
-Members can be created safely under a sponsor. **Achieved.**
+Sample network navigates correctly without loading the entire tree. **Achieved.**
 
 ## Completed phases
 - [x] Phase 1 — Foundation
 - [x] Phase 2 — Members & Sponsor
-- [ ] Phase 3 — Tree & Network UX
+- [x] Phase 3 — Tree & Network UX
 - [ ] Phase 4 — Projects/Properties/Registry Sales
 - [ ] Phase 5 — Direct Reward
 - [ ] Phase 6 — Upline
@@ -38,7 +38,41 @@ Members can be created safely under a sponsor. **Achieved.**
 - [ ] Phase 17 — QA/Deployment
 
 ## Current task
-None. Phase 2 delivered; Phase 3 not started.
+None. Phase 3 delivered; Phase 4 not started.
+
+## Phase 3 notes
+
+**Architecture decision — no schema change.** The initial analysis suggested a
+materialized path or closure table for tree performance. It was NOT added. MariaDB 10.4
+supports recursive CTEs, which deliver correct lazy loading against the documented
+schema. `MemberTreeService` uses CTEs for descendant walks and resolves branch totals
+for a whole batch of nodes in one query, so rendering a level never fires one query per
+node. If the network grows large enough to justify denormalisation, raise it in Phase 7
+with measurements rather than speculatively.
+
+**Lazy loading contract.** The tree page ships zero member rows in its HTML. Roots
+arrive from `tree/children`, and each expansion requests exactly one more level. The
+"Expand loaded" control only opens branches already fetched — there is deliberately no
+"expand everything" action, because that would defeat lazy loading on a large network.
+A test asserts the initial HTML contains no member names or codes.
+
+## Files changed in Phase 3
+**Created**
+- `app/Services/MemberTreeService.php`
+- `app/Http/Controllers/Admin/TreeController.php`
+- `resources/js/member-tree.js`
+- `resources/views/admin/tree/index.blade.php`, `downline.blade.php`
+- `tests/Feature/Tree/MemberTreeServiceTest.php`, `TreeNavigationTest.php`
+
+**Modified**
+- `app/Models/Member.php` — `ancestors()` rewritten to walk `sponsor_id` and re-query
+  full models (see Issues below)
+- `app/Http/Controllers/Admin/MemberController.php` — passes level and branch totals;
+  eager load now includes `sponsor_id`
+- `app/Providers/AppServiceProvider.php` — Bootstrap 5 pagination views
+- `resources/views/admin/members/show.blade.php` — rebuilt as the tabbed profile
+- `resources/scss/app.scss` — tree card and connector styling
+- `resources/js/app.js`, sidebar partial, `routes/web.php`
 
 ## Phase 2 decisions (client-confirmed 2026-08-15)
 1. **Member ID** — admin-settable prefix + plain sequential number (`RS1`, `RS2`, …).
@@ -141,12 +175,25 @@ member code. Unique: `member_code`, `sequence_number`, `mobile`, `email`. Indexe
 
 Seeded: `admin@realstate.test` / `Admin@12345` (role `admin`). **Change before production.**
 
-Sample data left in the development database from manual verification: RS1 Rahul Sharma
-(root), RS2 Amit Verma and RS3 Sunita Rao (both sponsored by RS1). Useful for Phase 3
-tree work; delete if a clean start is preferred.
+Development database now holds a 9-member network, partly entered by the client through
+the UI and partly added during verification. Two roots (RS1, RS4) with branches up to
+level 2. RS8 (Deepak Joshi) and RS9 (Priya Nair) were created by Claude during Phase 3
+verification and can be deleted if unwanted.
 
 ## Tests
-61 passed, 184 assertions, 0 failures (PHPUnit 12.5.33, ~4.8 s).
+98 passed, 290 assertions, 0 failures (PHPUnit 12.5.33, ~10 s).
+
+**Phase 3 (37)**
+- Tree service: roots only, children return exactly one level, branch totals across
+  every depth, active counts excluding the member itself, batched totals, soft-deleted
+  members ignored, level calculation, path-to-root ordering, downline with levels,
+  depth filtering, pagination, leaf handling, search levels, and a 25-deep chain
+- Tree navigation: guests rejected on page and endpoints, the tree page renders no
+  member rows at all, children endpoint returns roots then one level, node payload
+  carries level/direct/team totals, leaf nodes report no children, invalid member id
+  rejected with 422, focus returns the expansion path, search reports levels, downline
+  page listing/depth filter/pagination, profile tabs, later-phase tabs marked
+- Regression: ancestor chain survives a partial eager load; profile shows the full chain
 
 **Phase 1 (23)** — login, inactive-account rejection, rate limiting, role/auth route
 protection, mid-session deactivation, AJAX envelope contract.
@@ -186,7 +233,19 @@ protection, mid-session deactivation, AJAX envelope contract.
 - Vite production build succeeds
 
 ## Known issues/blockers
-None blocking Phase 3.
+None blocking Phase 4.
+
+**Two defects found and fixed during Phase 3**
+1. `Member::ancestors()` traversed the loaded `sponsor` relation. Any caller that
+   eager-loaded it with a partial column list omitting `sponsor_id` — which
+   `MemberController::show()` did — silently truncated the chain to one level, so the
+   member profile displayed an incomplete upline. Now walks `sponsor_id` and re-queries
+   full models, making it immune to how a caller loaded data. This mattered enough to
+   fix properly because Phases 6 and 7 calculate money from this chain. Regression test
+   added.
+2. Pagination rendered Laravel's default **Tailwind** markup, unstyled against the
+   Bootstrap 5 UI, affecting the member list since Phase 2. `Paginator::useBootstrapFive()`
+   is now set in `AppServiceProvider`.
 
 Notes:
 1. Port 8000 is occupied by long-running `global_life_new` dev servers. This project
@@ -197,7 +256,8 @@ Notes:
    issue, cosmetic, does not affect output.
 
 ## Business questions pending
-Grouped by the phase they block. **Phase 3 is not blocked by any of these.**
+Grouped by the phase they block. **Phase 4 is blocked by questions 1 and 2 below — they
+must be answered before registry sales can be implemented.**
 
 Resolved in Phase 2: member code format, root members, sponsor re-parenting policy and
 member status values — see "Phase 2 decisions" above.
@@ -235,6 +295,6 @@ member status values — see "Phase 2 decisions" above.
     member login later is additive and does not invalidate Phase 1.
 
 ## Last known good state
-Phase 2 complete. Member management with unique member codes, sponsor assignment via
-AJAX search, self-sponsor and circular protection, direct referral listing, soft deletes
-with tree-integrity guards. 61 passing tests. Committed to git.
+Phase 3 complete. Sponsor tree with AJAX lazy loading (one level per request), branch
+summaries via batched recursive CTEs, focus/search/level-filter controls, paginated full
+downline listing, and the tabbed member profile. 98 passing tests. Committed to git.

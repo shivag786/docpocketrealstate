@@ -4,6 +4,7 @@ window.bootstrap = bootstrap;
 
 // Feature modules. Each is inert unless its markup is present on the page.
 import './sponsor-picker.js';
+import './member-tree.js';
 
 /**
  * ---------------------------------------------------------------------------

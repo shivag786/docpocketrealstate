@@ -168,6 +168,39 @@ class SponsorValidationTest extends TestCase
     }
 
     #[Test]
+    public function the_ancestor_chain_survives_a_partial_eager_load(): void
+    {
+        // Regression: ancestors() used to traverse the loaded `sponsor` relation.
+        // A caller eager-loading it without sponsor_id silently truncated the
+        // chain to one level. Phases 6 and 7 calculate money from this chain.
+        $a = Member::factory()->create();
+        $b = Member::factory()->sponsoredBy($a)->create();
+        $c = Member::factory()->sponsoredBy($b)->create();
+        $d = Member::factory()->sponsoredBy($c)->create();
+
+        $loaded = Member::with('sponsor:id,name,member_code')->find($d->id);
+
+        $this->assertCount(3, $loaded->ancestors());
+        $this->assertSame([$c->id, $b->id, $a->id], $loaded->ancestors()->pluck('id')->all());
+    }
+
+    #[Test]
+    public function the_member_profile_shows_the_complete_upline_chain(): void
+    {
+        $a = Member::factory()->create();
+        $b = Member::factory()->sponsoredBy($a)->create();
+        $c = Member::factory()->sponsoredBy($b)->create();
+        $d = Member::factory()->sponsoredBy($c)->create();
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.members.show', $d))
+            ->assertOk()
+            ->assertSee($c->member_code)
+            ->assertSee($b->member_code)
+            ->assertSee($a->member_code);
+    }
+
+    #[Test]
     public function descendant_ids_include_every_level(): void
     {
         $root = Member::factory()->create();

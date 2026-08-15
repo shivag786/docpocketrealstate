@@ -8,6 +8,7 @@ use App\Http\Requests\Member\StoreMemberRequest;
 use App\Http\Requests\Member\UpdateMemberRequest;
 use App\Models\Member;
 use App\Services\MemberService;
+use App\Services\MemberTreeService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -63,16 +64,19 @@ class MemberController extends Controller
             ->with('success', "Member {$member->member_code} ({$member->name}) was created.");
     }
 
-    public function show(Member $member): View
+    public function show(Member $member, MemberTreeService $tree): View
     {
-        $member->load('sponsor:id,name,member_code,status');
+        // sponsor_id is included so any onward chain walk stays intact.
+        $member->load('sponsor:id,name,member_code,status,sponsor_id');
 
         return view('admin.members.show', [
             'member' => $member,
             'uplines' => $member->ancestors(),
+            'level' => $tree->levelOf($member),
+            'branch' => $tree->branchTotals([$member->id])[$member->id],
             'referrals' => $member->directReferrals()
                 ->withCount('directReferrals')
-                ->orderBy('member_code')
+                ->orderBy('sequence_number')
                 ->paginate(config('members.per_page'), ['*'], 'referrals')
                 ->withQueryString(),
             'deletionBlockers' => $this->members->deletionBlockers($member),

@@ -148,21 +148,33 @@ class Member extends Model
         $visited = [$this->id => true];
         $guard = (int) config('members.sponsor.max_depth_guard', 100);
 
-        $current = $this->sponsor;
+        // Deliberately walks sponsor_id and re-queries full models rather than
+        // traversing the loaded `sponsor` relation. A caller that eager-loads
+        // that relation with a partial column list (e.g. "sponsor:id,name")
+        // would otherwise silently truncate the chain, because the loaded model
+        // has no sponsor_id to continue from. Phases 6 and 7 calculate money
+        // from this chain, so it must not depend on how a caller loaded things.
+        $nextId = $this->sponsor_id;
 
-        while ($current !== null && $guard-- > 0) {
-            if (isset($visited[$current->id])) {
+        while ($nextId !== null && $guard-- > 0) {
+            if (isset($visited[$nextId])) {
                 break; // defensive: a cycle should be impossible
             }
 
-            $visited[$current->id] = true;
+            $current = static::query()->find($nextId);
+
+            if ($current === null) {
+                break;
+            }
+
+            $visited[$nextId] = true;
             $ancestors->push($current);
 
             if ($limit !== null && $ancestors->count() >= $limit) {
                 break;
             }
 
-            $current = $current->sponsor;
+            $nextId = $current->sponsor_id;
         }
 
         return $ancestors;

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\MemberController;
 use App\Http\Controllers\Admin\SponsorSearchController;
+use App\Http\Controllers\Admin\TreeController;
 use App\Http\Controllers\Auth\LoginController;
 use Illuminate\Support\Facades\Route;
 
@@ -40,6 +41,16 @@ Route::middleware(['auth', 'active'])->group(function () {
                 ->name('members.search-sponsors');
 
             Route::resource('members', MemberController::class);
+
+            // Sponsor tree. Nodes and search are AJAX; the downline listing is a
+            // paginated page because a branch can hold thousands of members.
+            Route::prefix('tree')->name('tree.')->group(function () {
+                Route::get('/', [TreeController::class, 'index'])->name('index');
+                Route::get('children', [TreeController::class, 'children'])->name('children');
+                Route::get('search', [TreeController::class, 'search'])->name('search');
+                Route::get('focus/{member}', [TreeController::class, 'focus'])->name('focus');
+                Route::get('downline/{member}', [TreeController::class, 'downline'])->name('downline');
+            });
         });
 });
 

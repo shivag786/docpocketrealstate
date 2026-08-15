@@ -12,7 +12,7 @@
         ],
         'Network' => [
             ['label' => 'Members', 'icon' => 'bi-people', 'route' => 'admin.members.index', 'active' => 'admin.members.*', 'phase' => 2],
-            ['label' => 'Sponsor Tree', 'icon' => 'bi-diagram-3', 'route' => null, 'phase' => 3],
+            ['label' => 'Sponsor Tree', 'icon' => 'bi-diagram-3', 'route' => 'admin.tree.index', 'active' => 'admin.tree.*', 'phase' => 3],
         ],
         'Sales' => [
             ['label' => 'Projects', 'icon' => 'bi-buildings', 'route' => null, 'phase' => 4],

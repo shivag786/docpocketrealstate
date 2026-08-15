@@ -31,6 +31,67 @@ Chronological project history. Claude must append an entry after each meaningful
 
 ---
 
+### 2026-08-15 — Phase 3 — Sponsor Tree & Network UX
+
+**Added**
+- `MemberTreeService` — roots, one-level children, batched branch totals, level and
+  path-to-root calculation, paginated downline with per-member level, and tree search.
+  Descendant walks use recursive CTEs with a depth guard against corrupt cycles
+- Sponsor tree page with AJAX lazy loading: only the roots load initially and each
+  expansion fetches exactly one more level, with per-node loading states
+- Tree controls: member search with jump-to, focus (re-root at a member), view sponsor,
+  expand-loaded, collapse all, level filter, back to roots
+- Expandable member cards showing level, direct count, total team, active team and status
+- "View Full Downline" — every descendant as a paginated, depth-filterable listing
+- Member profile rebuilt with the tab set from the UI spec: Overview, Sponsor/Upline,
+  Direct Team, Full Tree; the five reward tabs render disabled with their phase number
+- Tree card, connector and responsive styling
+
+**Changed**
+- Sidebar: Sponsor Tree enabled
+- `MemberController::show()` now supplies level and branch totals
+
+**Database**
+- None. Phase 3 required no schema change: recursive CTEs cover the hierarchy against
+  the documented `members` table. The materialized path floated in the initial analysis
+  was deliberately not added.
+
+**Tests**
+- 37 new tests (98 total, 290 assertions, all passing)
+- Includes an explicit assertion that the tree page renders no member rows in its
+  initial HTML, which is what makes the lazy-loading claim verifiable
+
+**Manual verification**
+- Tree page loads with no member data inlined; roots arrive over AJAX
+- Children endpoint returns one level only, with correct branch totals per node
+- Focus on RS6 returned level 2 and expansion path [RS4, RS5]
+- Search for "kumar" returned RS5 at level 1 and RS6 at level 2
+- Downline for RS4 listed 5 members across levels 1–2; depth filter of 1 correctly
+  excluded the level-2 member
+- Member profile shows the complete upline chain and the tabbed layout
+
+**Issues**
+Two defects found and fixed:
+1. `Member::ancestors()` traversed the loaded `sponsor` relation, so a caller
+   eager-loading it without `sponsor_id` — as the member profile did — silently
+   truncated the chain to one level. It now walks `sponsor_id` and re-queries full
+   models. Phases 6 and 7 derive money from this chain, so it was fixed at the root
+   rather than patched at the call site. Regression test added.
+2. Pagination was rendering Laravel's default Tailwind markup against a Bootstrap 5 UI,
+   affecting the member list since Phase 2. `Paginator::useBootstrapFive()` now set.
+
+**Decision**
+- No denormalised tree structure. Recursive CTEs meet the requirement without deviating
+  from the documented schema; revisit in Phase 7 only with measurements.
+- No "expand entire network" control, deliberately — it would defeat lazy loading.
+
+**Next**
+- Phase 4 — Projects, Properties/Sites and Registry Sales. **Blocked**: the definition of
+  an "approved" sale and whether the period follows `sale_date` or `registry_date` must
+  be confirmed first.
+
+---
+
 ### 2026-08-15 — Phase 2 — Member Management & Sponsor Assignment
 
 **Added**
