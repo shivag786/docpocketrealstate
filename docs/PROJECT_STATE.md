@@ -475,7 +475,15 @@ level 2. RS8 (Deepak Joshi) and RS9 (Priya Nair) were created by Claude during P
 verification and can be deleted if unwanted.
 
 ## Tests
-343 passed, 1,135 assertions, 0 failures (PHPUnit 12.5.33, ~20 s).
+352 passed, 1,163 assertions, 0 failures (PHPUnit 12.5.33, ~20 s).
+
+**Sales History (9 new)** — opens on today and hides an older sale; quick ranges
+widen past it; a search term and a member filter each still reach a sale from
+months ago (the today-default exception); every row shows its direct reward
+(1,250.50 × 40 = 50,020.00); all six page sizes offered and an unlisted one
+rejected; sorting; an unknown sort column ignored; paging keeps the filters.
+`history_is_paginated` had been implicitly relying on the factory's random dates
+landing in range — it now dates its fixtures explicitly.
 
 **Direct Sale report + dashboard (18)** — the page opens on today; the row
 multiplication is exact (1,234.56 × 40 = 49,382.40); the total covers all 30
@@ -672,16 +680,33 @@ protection, mid-session deactivation, AJAX envelope contract.
 
 ## Reporting and UI (2026-08-17)
 
-**Direct Sale report** — `/admin/rewards/direct-sales`, in the Rewards menu.
-Opens on **today** by client request. Date range (Today / Last 7 days / This month
-/ All time presets, or explicit from–to), member filter defaulting to all, page
-sizes 25 / 50 / 150 / 250 / 500 / 1000, sortable columns, and `Sq.Ft. × ₹40` worked
-out on every row. Totals cover the whole filtered set, not the visible page — a
-total that changed when you turned the page would be worse than none.
+**Two report screens share one behaviour.** `Direct Sale`
+(`/admin/rewards/direct-sales`) and `Sales History` (`/admin/sales`) both open on
+**today** by client request, and both offer the same date presets (Today / Last 7
+days / This month / All time, or explicit from–to), a member filter defaulting to
+all, page sizes 25 / 50 / 150 / 250 / 500 / 1000, sortable columns, and
+`Sq.Ft. × ₹40` worked out on every row.
 
-The amount is computed from the sale rather than read from `reward_ledger`, so the
-page is honest even for an uncalculated month. The two agree in practice because
-sale entry recalculates.
+That is not duplicated code: `App\Http\Controllers\Concerns\ResolvesReportFilters`
+holds the one definition of the presets, page sizes and sort whitelist. **Any new
+report screen should use it** rather than re-deriving the rules — the two pages
+must not drift apart for reasons an operator cannot see.
+
+**The today-default has a deliberate exception.** A request carrying a search
+term, member, project or period is looking for something specific, so it searches
+every date rather than being pinned to today; explicit dates win over both. Without
+this, searching for a registry number from three months ago would silently return
+nothing and the page would look broken. Covered by tests on both screens.
+
+**Totals cover the whole filtered set, not the visible page** — a total that
+changed when you turned the page would be worse than none.
+
+The Direct Sale amount is computed from the sale rather than read from
+`reward_ledger`, so the page is honest even for an uncalculated month. The two
+agree in practice because sale entry recalculates.
+
+The sort whitelist maps a public key to a real column, so a crafted `sort`
+parameter can never reach a column the page does not offer. Tested on both screens.
 
 **Build-phase markers are gone from delivered features.** The dashboard, member
 profile and sale detail carried "Phase N" placeholders written when those engines

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\RewardType;
+use App\Http\Controllers\Concerns\ResolvesReportFilters;
 use App\Http\Controllers\Controller;
 use App\Models\Member;
 use App\Models\RegistrySale;
@@ -28,8 +29,7 @@ use Illuminate\View\View;
  */
 class DirectSaleController extends Controller
 {
-    /** Page sizes offered in the table's own control. */
-    public const PAGE_SIZES = [25, 50, 150, 250, 500, 1000];
+    use ResolvesReportFilters;
 
     private const SORTABLE = [
         'date' => 'registry_date',
@@ -86,35 +86,15 @@ class DirectSaleController extends Controller
      */
     private function filters(Request $request): array
     {
-        $today = now()->toDateString();
-
-        // "range=all" is how the operator escapes the today-only default.
-        $preset = (string) $request->query('range', $request->hasAny(['from', 'to']) ? 'custom' : 'today');
-
-        [$from, $to] = match ($preset) {
-            'all' => [null, null],
-            'month' => [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()],
-            'week' => [now()->subDays(6)->toDateString(), $today],
-            'custom' => [
-                $this->date($request->query('from')),
-                $this->date($request->query('to')),
-            ],
-            default => [$today, $today],
-        };
-
-        $perPage = (int) $request->query('per_page', self::PAGE_SIZES[0]);
-
-        $sort = (string) $request->query('sort', 'date');
-        $direction = strtolower((string) $request->query('direction', 'desc'));
+        // Picking one member is a narrowing question, so it lifts the today-only
+        // default and searches every date instead.
+        $window = $this->resolveDateWindow($request, ['member_id']);
 
         return [
-            'from' => $from,
-            'to' => $to,
+            ...$window,
+            ...$this->resolveSort($request, self::SORTABLE, 'date'),
             'member_id' => $request->filled('member_id') ? (int) $request->query('member_id') : null,
-            'per_page' => in_array($perPage, self::PAGE_SIZES, true) ? $perPage : self::PAGE_SIZES[0],
-            'sort' => array_key_exists($sort, self::SORTABLE) ? $sort : 'date',
-            'direction' => $direction === 'asc' ? 'asc' : 'desc',
-            'preset' => $preset,
+            'per_page' => $this->resolvePerPage($request),
         ];
     }
 
@@ -134,12 +114,5 @@ class DirectSaleController extends Controller
             // A stable tie-break, so paging never repeats or skips a row when
             // many sales share a date.
             ->orderBy('registry_sales.id', 'desc');
-    }
-
-    private function date(mixed $value): ?string
-    {
-        $value = is_string($value) ? trim($value) : '';
-
-        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1 ? $value : null;
     }
 }

@@ -31,6 +31,54 @@ Chronological project history. Claude must append an entry after each meaningful
 
 ---
 
+### 2026-08-17 — Sales History brought up to the report standard
+
+**Changed**
+- Sales History now opens on **today**, matching the Direct Sale report
+- Quick ranges (Today / Last 7 days / This month / All time), a member dropdown,
+  page sizes **25 / 50 / 150 / 250 / 500 / 1000**, and sortable Registry no. /
+  Date / Member / Sq.Ft. columns
+- Each row now shows the direct reward the sale earned (`Sq.Ft. × ₹40`), and the
+  filtered totals carry a reward figure beside the Sq.Ft.
+- Four tonal stat tiles and the shared `data-table` styling; the Project/Site and
+  Entered-by columns fold away on small screens rather than crushing the table
+- Filters travel with every paging and sorting link
+
+**Added**
+- `ResolvesReportFilters` trait — one definition of the date presets, page sizes
+  and sort whitelist, now shared by Sales History and Direct Sale. The two pages
+  answer "which dates, how many rows, sorted by what" identically because they
+  ask the same code
+
+**The today-default has a deliberate exception.** A request carrying a search
+term, member, project or period is looking for something specific, so it searches
+every date instead of being pinned to today — otherwise search would look broken.
+Explicit dates always win over both. Two tests cover the exception directly.
+
+**Fixed**
+- The member profile's new "Sales" tab link passed `member=RS4`, which the
+  controller does not read, so it silently listed every member's sales. Now
+  `member_id`. Introduced in the previous commit and caught while wiring the
+  member dropdown
+
+**Tests**
+- 9 new tests (352 total, 1,163 assertions, all passing)
+- The page opens on today and hides an older sale; quick ranges widen past it;
+  a search and a member filter both still reach a sale from months ago; each row
+  shows its direct reward (1,250.50 × 40 = 50,020.00); all six page sizes offered
+  and an unlisted one rejected; sorting; an unknown sort column ignored; paging
+  keeps filters
+- `history_is_paginated` was implicitly relying on the factory's random dates
+  landing in range. It now dates its fixtures explicitly, so the page size decides
+  the result rather than the calendar
+
+**Manual verification**
+- Live: 1 sale today, 6 this month, 11 all time, 2 for RS4 — matching the
+  database. All-time totals read 13,700.50 Sq.Ft. and ₹548,020.00, reconciling
+  with the ledger
+
+---
+
 ### 2026-08-17 — Direct Sale report, live dashboard, UI pass
 
 **Added**

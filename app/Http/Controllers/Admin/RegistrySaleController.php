@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\RewardType;
+use App\Http\Controllers\Concerns\ResolvesReportFilters;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Sale\StoreRegistrySaleRequest;
 use App\Models\Member;
@@ -9,6 +11,7 @@ use App\Models\Project;
 use App\Models\RegistrySale;
 use App\Services\PeriodRecalculationService;
 use App\Services\RegistrySaleService;
+use App\Support\Money;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -22,6 +25,8 @@ use RuntimeException;
  */
 class RegistrySaleController extends Controller
 {
+    use ResolvesReportFilters;
+
     public function __construct(
         private readonly RegistrySaleService $sales,
         private readonly PeriodRecalculationService $recalculations,
@@ -93,32 +98,83 @@ class RegistrySaleController extends Controller
     /**
      * Sales history with search, filters, date range and pagination.
      */
+    /**
+     * Columns the table offers, mapped to real ones so a crafted `sort`
+     * parameter can never reach a column this page does not show.
+     */
+    private const SORTABLE = [
+        'date' => 'registry_date',
+        'member' => 'members.member_code',
+        'sqft' => 'registry_sales.sqft',
+        'reference' => 'registry_sales.registry_reference',
+    ];
+
     public function index(Request $request): View
     {
+        $filters = $this->historyFilters($request);
+        $rate = RewardType::Direct->rate();
+
         $query = RegistrySale::query()
+            ->join('members', 'members.id', '=', 'registry_sales.member_id')
             ->with([
                 'member:id,member_code,name,mobile',
                 'project:id,name',
                 'property:id,property_code',
                 'enteredBy:id,name',
             ])
-            ->search($request->query('q'))
-            ->betweenDates($request->query('from'), $request->query('to'))
-            ->when($request->filled('member_id'), fn ($q) => $q->where('member_id', $request->query('member_id')))
-            ->when($request->filled('project_id'), fn ($q) => $q->where('project_id', $request->query('project_id')))
-            ->when($request->filled('period'), fn ($q) => $q->forPeriod($request->query('period')));
+            ->search($filters['q'])
+            ->betweenDates($filters['from'], $filters['to'])
+            ->when($filters['member_id'], fn ($q, $id) => $q->where('registry_sales.member_id', $id))
+            ->when($filters['project_id'], fn ($q, $id) => $q->where('registry_sales.project_id', $id))
+            ->when($filters['period'], fn ($q, $period) => $q->forPeriod($period));
 
         // Totals reflect the current filters, not the current page.
         $totals = $this->sales->totals($query);
 
+        $sales = $query
+            ->select('registry_sales.*')
+            ->orderBy(self::SORTABLE[$filters['sort']], $filters['direction'])
+            // Stable tie-break, so paging never repeats or skips a row when many
+            // sales share a date.
+            ->orderBy('registry_sales.id', 'desc')
+            ->paginate($filters['per_page'])
+            ->withQueryString();
+
         return view('admin.sales.index', [
-            'sales' => $query->latest('registry_date')->latest('id')
-                ->paginate(config('members.per_page'))
-                ->withQueryString(),
+            'sales' => $sales,
             'totals' => $totals,
+            'rate' => $rate,
+            // What the filtered Sq.Ft. earned in direct reward — the one rate
+            // that applies to every sale without qualification.
+            'totalDirect' => Money::multiply(Money::of($totals['sqft']), $rate),
             'projects' => Project::orderBy('name')->pluck('name', 'id'),
-            'filters' => $request->only(['q', 'from', 'to', 'member_id', 'project_id', 'period']),
+            'members' => Member::query()->orderBy('sequence_number')->get(['id', 'member_code', 'name']),
+            'pageSizes' => self::PAGE_SIZES,
+            'filters' => $filters,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function historyFilters(Request $request): array
+    {
+        // A search term, a member, a project or a period all mean "find me this
+        // particular thing" — pinning those to today would make the page look
+        // broken. A bare visit still opens on today.
+        $window = $this->resolveDateWindow($request, ['q', 'member_id', 'project_id', 'period']);
+
+        return [
+            ...$window,
+            ...$this->resolveSort($request, self::SORTABLE, 'date'),
+            'q' => $request->filled('q') ? trim((string) $request->query('q')) : null,
+            'member_id' => $request->filled('member_id') ? (int) $request->query('member_id') : null,
+            'project_id' => $request->filled('project_id') ? (int) $request->query('project_id') : null,
+            'period' => preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', (string) $request->query('period')) === 1
+                ? (string) $request->query('period')
+                : null,
+            'per_page' => $this->resolvePerPage($request),
+        ];
     }
 
     public function show(RegistrySale $sale): View

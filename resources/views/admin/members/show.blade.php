@@ -67,7 +67,7 @@
 
         {{-- Delivered elsewhere: link out rather than showing a dead tab. --}}
         @foreach ([
-            ['Sales', 'bi-receipt', route('admin.sales.index', ['member' => $member->member_code])],
+            ['Sales', 'bi-receipt', route('admin.sales.index', ['member_id' => $member->id])],
             ['Targets', 'bi-bullseye', route('admin.targets.show', $member)],
         ] as [$label, $icon, $url])
             <li class="nav-item" role="presentation">

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Sale;
 
+use App\Http\Controllers\Admin\RegistrySaleController;
 use App\Models\Member;
 use App\Models\Project;
 use App\Models\Property;
@@ -32,13 +33,158 @@ class SalesHistoryTest extends TestCase
     #[Test]
     public function sales_are_listed(): void
     {
-        $sale = RegistrySale::factory()->create(['registry_reference' => 'REG-FINDME']);
+        $sale = RegistrySale::factory()->create([
+            'registry_reference' => 'REG-FINDME',
+            'registry_date' => now()->toDateString(),
+            'sale_date' => now()->toDateString(),
+        ]);
 
         $this->actingAs($this->admin)
             ->get(route('admin.sales.index'))
             ->assertOk()
             ->assertSee('REG-FINDME')
             ->assertSee($sale->member->member_code);
+    }
+
+    #[Test]
+    public function the_page_opens_on_todays_sales(): void
+    {
+        // Client-confirmed: the history opens on the current day, like the
+        // Direct Sale report.
+        RegistrySale::factory()->create([
+            'registry_reference' => 'REG-TODAY',
+            'registry_date' => now()->toDateString(),
+            'sale_date' => now()->toDateString(),
+        ]);
+
+        RegistrySale::factory()->create([
+            'registry_reference' => 'REG-OLD',
+            'registry_date' => now()->subMonth()->toDateString(),
+            'sale_date' => now()->subMonth()->toDateString(),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.sales.index'))
+            ->assertOk()
+            ->assertSee('REG-TODAY')
+            ->assertDontSee('REG-OLD');
+    }
+
+    #[Test]
+    public function the_quick_ranges_widen_past_today(): void
+    {
+        RegistrySale::factory()->create([
+            'registry_reference' => 'REG-OLD',
+            'registry_date' => now()->subMonths(2)->toDateString(),
+            'sale_date' => now()->subMonths(2)->toDateString(),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.sales.index', ['range' => 'all']))
+            ->assertOk()
+            ->assertSee('REG-OLD');
+    }
+
+    #[Test]
+    public function a_search_looks_across_all_dates_not_just_today(): void
+    {
+        // The today-only default must never make search look broken: a request
+        // that names something specific is asking to find it wherever it is.
+        RegistrySale::factory()->create([
+            'registry_reference' => 'REG-LONGAGO',
+            'registry_date' => now()->subMonths(3)->toDateString(),
+            'sale_date' => now()->subMonths(3)->toDateString(),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.sales.index', ['q' => 'REG-LONGAGO']))
+            ->assertOk()
+            ->assertSee('REG-LONGAGO');
+    }
+
+    #[Test]
+    public function filtering_by_member_looks_across_all_dates(): void
+    {
+        $member = Member::factory()->create();
+
+        RegistrySale::factory()->forMember($member)->create([
+            'registry_reference' => 'REG-THEIRS',
+            'registry_date' => now()->subMonths(4)->toDateString(),
+            'sale_date' => now()->subMonths(4)->toDateString(),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.sales.index', ['member_id' => $member->id]))
+            ->assertOk()
+            ->assertSee('REG-THEIRS');
+    }
+
+    #[Test]
+    public function each_row_shows_the_direct_reward_the_sale_earned(): void
+    {
+        RegistrySale::factory()->sqft('1250.50')->create([
+            'registry_date' => now()->toDateString(),
+            'sale_date' => now()->toDateString(),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.sales.index'))
+            ->assertOk()
+            ->assertSee('1,250.50')
+            // 1,250.50 × 40 = 50,020.00
+            ->assertSee('50,020.00');
+    }
+
+    #[Test]
+    public function all_the_documented_page_sizes_are_offered(): void
+    {
+        $response = $this->actingAs($this->admin)->get(route('admin.sales.index'));
+
+        foreach (RegistrySaleController::PAGE_SIZES as $size) {
+            $response->assertSee('value="'.$size.'"', false);
+        }
+
+        // An unlisted size is not honoured.
+        $this->actingAs($this->admin)
+            ->get(route('admin.sales.index', ['per_page' => 3]))
+            ->assertOk()
+            ->assertSee('value="25" selected', false);
+    }
+
+    #[Test]
+    public function the_columns_can_be_sorted(): void
+    {
+        RegistrySale::factory()->sqft('100.00')->create([
+            'registry_date' => now()->toDateString(), 'sale_date' => now()->toDateString(),
+        ]);
+        RegistrySale::factory()->sqft('900.00')->create([
+            'registry_date' => now()->toDateString(), 'sale_date' => now()->toDateString(),
+        ]);
+
+        $ascending = $this->actingAs($this->admin)
+            ->get(route('admin.sales.index', ['sort' => 'sqft', 'direction' => 'asc']))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertLessThan(
+            strpos($ascending, '900.00'),
+            strpos($ascending, '100.00'),
+            'Ascending by Sq.Ft. must put the smaller sale first.'
+        );
+    }
+
+    #[Test]
+    public function an_unknown_sort_column_is_ignored_rather_than_trusted(): void
+    {
+        RegistrySale::factory()->create([
+            'registry_reference' => 'REG-SAFE',
+            'registry_date' => now()->toDateString(), 'sale_date' => now()->toDateString(),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.sales.index', ['sort' => 'members.password', 'direction' => 'drop']))
+            ->assertOk()
+            ->assertSee('REG-SAFE');
     }
 
     #[Test]
@@ -160,13 +306,34 @@ class SalesHistoryTest extends TestCase
     #[Test]
     public function history_is_paginated(): void
     {
-        config(['members.per_page' => 10]);
-
-        RegistrySale::factory()->count(25)->create();
+        // Dated explicitly rather than left to the factory's random range, so
+        // the page size is what decides the result and not the calendar.
+        RegistrySale::factory()->count(30)->create([
+            'registry_date' => now()->toDateString(),
+            'sale_date' => now()->toDateString(),
+        ]);
 
         $this->actingAs($this->admin)
-            ->get(route('admin.sales.index'))
+            ->get(route('admin.sales.index', ['per_page' => 25]))
             ->assertOk()
-            ->assertSee('page=2', false);
+            ->assertSee('page=2', false)
+            ->assertSee('Page 1 of 2')
+            ->assertSee('25 per page');
+    }
+
+    #[Test]
+    public function paging_keeps_the_filters(): void
+    {
+        $member = Member::factory()->create();
+
+        RegistrySale::factory()->count(40)->forMember($member)->create([
+            'registry_date' => now()->toDateString(),
+            'sale_date' => now()->toDateString(),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.sales.index', ['member_id' => $member->id, 'per_page' => 25, 'page' => 2]))
+            ->assertOk()
+            ->assertSee('member_id='.$member->id, false);
     }
 }
