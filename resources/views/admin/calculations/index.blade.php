@@ -243,6 +243,97 @@
             </div>
         </div>
 
+        {{-- Target 1 — one calendar month --}}
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <strong>Calculate One Month Target</strong>
+                    <span class="badge text-bg-warning">₹{{ config('rewards.rates.target') }} / Sq.Ft.</span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        Each member's team Sq.Ft. tested against
+                        {{ number_format((float) ($targetPreview['target_sqft'] ?? 0), 0) }} Sq.Ft.
+                        for the month. The reward is fixed at the threshold, so a team doing more
+                        is still paid on {{ number_format((float) ($targetPreview['target_sqft'] ?? 0), 0) }}.
+                        Achieved once per member, then they move to the Two Month Target.
+                    </p>
+
+                    @if ($targetPreview)
+                        <div class="row g-2 mb-3">
+                            @foreach ([
+                                ['Members measured', number_format($targetPreview['measured'])],
+                                ['Would achieve', number_format($targetPreview['achieved'])],
+                                ['Would fall short', number_format($targetPreview['missed'])],
+                                ['Reward to pay', '₹' . number_format((float) $targetPreview['total_amount'], 2)],
+                            ] as [$label, $value])
+                                <div class="col-6">
+                                    <div class="border rounded p-2">
+                                        <div class="stat-label">{{ $label }}</div>
+                                        <div class="fw-semibold">{{ $value }}</div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        @if ($targetPreview['graduated'] > 0)
+                            <div class="alert alert-secondary small py-2 d-flex gap-2">
+                                <i class="bi bi-mortarboard mt-1"></i>
+                                <div>
+                                    <strong>{{ $targetPreview['graduated'] }}</strong>
+                                    {{ Str::plural('member', $targetPreview['graduated']) }} already
+                                    achieved this target and {{ $targetPreview['graduated'] === 1 ? 'is' : 'are' }}
+                                    no longer measured against it.
+                                </div>
+                            </div>
+                        @endif
+
+                        @unless ($targetPreview['team_sales_ready'])
+                            <div class="alert alert-warning small py-2 d-flex gap-2">
+                                <i class="bi bi-exclamation-triangle mt-1"></i>
+                                <div>
+                                    Team Sales has not been calculated for {{ $period }}. Targets are
+                                    judged on the figures that run produces, so run it first.
+                                </div>
+                            </div>
+                        @endunless
+                    @endif
+
+                    @if ($targetRun)
+                        <div class="alert alert-success small d-flex gap-2 mb-3">
+                            <i class="bi bi-check-circle mt-1"></i>
+                            <div>
+                                Already calculated for {{ $period }} —
+                                <a href="{{ route('admin.calculations.show', $targetRun) }}">run #{{ $targetRun->id }}</a>.
+                            </div>
+                        </div>
+
+                        <a href="{{ route('admin.targets.achieved', ['period' => $period]) }}"
+                           class="btn btn-outline-primary">
+                            <i class="bi bi-bullseye me-1"></i>View target results
+                        </a>
+                    @else
+                        <form method="POST" action="{{ route('admin.targets.run') }}">
+                            @csrf
+                            <input type="hidden" name="period" value="{{ $period }}">
+                            <button type="submit" class="btn btn-primary"
+                                    @disabled(! $targetPreview || ! $targetPreview['team_sales_ready'] || $targetPreview['measured'] === 0)
+                                    data-confirm-submit="Calculate the one month target for {{ $period }}? Members who achieve it are paid once and move to the Two Month Target.">
+                                <i class="bi bi-bullseye me-1"></i>Calculate Target for {{ $period }}
+                            </button>
+                        </form>
+
+                        @if ($targetPreview && $targetPreview['team_sales_ready'] && $targetPreview['measured'] === 0)
+                            <div class="form-text">
+                                No member is being measured this period — either there were no
+                                sales, or everyone with sales has already achieved this target.
+                            </div>
+                        @endif
+                    @endif
+                </div>
+            </div>
+        </div>
+
         {{-- The remaining engines, shown but not yet wired. --}}
         <div class="col-12">
             <div class="card">
@@ -250,7 +341,8 @@
                 <div class="card-body">
                     <div class="d-grid gap-2">
                         @foreach ([
-                            ['Calculate Team Targets', 8, 'Tests each leader\'s team sales against targets 1-3'],
+                            ['Calculate Two Month Target', 9, '10,000 Sq.Ft. over 2 months — threshold and rate set by admin'],
+                            ['Calculate Three Month Target', 10, '35,000 Sq.Ft. over 3 months — threshold and rate set by admin'],
                             ['Calculate Company Club', 11, 'All approved company Sq.Ft. × ₹' . config('rewards.rates.company_club')],
                             ['Calculate All', 12, 'Runs every engine for the period in one controlled operation'],
                         ] as [$label, $phase, $description])

@@ -31,6 +31,74 @@ Chronological project history. Claude must append an entry after each meaningful
 
 ---
 
+### 2026-08-17 — Phase 8 — Target 1 (One Month Target)
+
+**Added**
+- `TargetRewardService` — tests each member's team Sq.Ft. for a calendar month against
+  5,000 and pays ₹150,000 on achievement
+- `target_calculations` table: one verdict per member per period, with the threshold
+  and rate frozen onto every row
+- **One Month Target** in the sidebar with two pages beneath it — Achieved and Not
+  Reached — sharing a month filter, tab badges and summary tiles
+- A per-member page that draws their whole team as a tree with each member's Sq.Ft.,
+  plus that member's own sale shown separately in a smaller font
+- Target history table: every month a member has been measured
+- Calculate One Month Target wired into the Calculation Center with a live preview
+
+**Changed**
+- Sidebar gained **submenu support** — a nav item with `children` renders as a
+  Bootstrap collapse group; the parent highlights when either page is open
+- The Team Sales report's Target column now links to the verdict instead of showing a
+  "Phase 8" badge
+- `config/rewards.php` targets rewritten with the confirmed rules; Targets 2 and 3
+  carry a `rate` seeded from Target 1's ₹30 and explicitly marked unconfirmed
+
+**Database**
+- New `target_calculations`. Unique on `(member_id, period)` — one verdict per month —
+  and on `(member_id, achieved_level)`, where `achieved_level` holds the target level
+  on a win and NULL on a miss. Since MySQL permits unlimited NULLs in a unique index,
+  misses never collide but a second achievement of the same target is impossible
+- `team_calculations.target_sqft / achieved / reward_amount` remain NULL and are now
+  dead columns — the verdict lives in `target_calculations`
+
+**Tests**
+- 47 new tests (301 total, 975 assertions, all passing)
+- The client's own example is pinned: 7,000 against 5,000 pays ₹150,000 and explicitly
+  not ₹210,000
+- Calendar-month boundary: 3,000 on 30 June plus 3,000 on 1 July reaches 5,000 in a
+  rolling window but achieves neither month
+- A mid-month joiner is measured against the full 5,000, not a pro-rated figure
+- Paying once is proven twice — the engine skips prior achievers, and a direct insert
+  bypassing the engine is rejected by the database
+
+**Manual verification**
+- Runs #10-12 against live June/July/August data. June and July: 7 measured, 0
+  achievers (best teams 2,300 and 3,500). August: 11 measured, 1 achiever
+- **RS4 did 5,000.50 Sq.Ft. and was paid ₹150,000, not ₹150,015** — the 0.50 surplus
+  discarded exactly as confirmed. Ledger row: `sqft 5,000.00 × rate 30.00 = 150,000.00`
+- The contribution tree for RS4 totals 5,000.50, matching the measured figure
+- Both pages rendered against live data: RS4 appears on Achieved with its own-sale
+  figure and on neither Not Reached nor any later month
+
+**Issues**
+- None found in Phase 8
+
+**Decision**
+- Client-confirmed 2026-08-17 (docs/02_BUSINESS_RULES.md §3.1): calendar-month
+  periods with no pro-rating; reward fixed at the threshold; surplus discarded; every
+  member measured, not only Team Leaders; one active target at a time with unlimited
+  retries on failure and a single lifetime payment on achievement; Targets 2 and 3
+  admin-configured; member status not consulted
+- The Target engine reads the Team Sales run rather than recomputing the rollup, so
+  the two reports can never disagree. Team Sales must therefore be run first
+- The ledger records the THRESHOLD Sq.Ft. so `sqft × rate = amount` holds on every row
+
+**Next**
+- Phase 9 (Two Month Target) needs the admin settings screen first, since its
+  threshold and rate are admin-configured and must carry effective-from dates
+
+---
+
 ### 2026-08-15 — Phase 7 — Team Sales Engine
 
 **Added**

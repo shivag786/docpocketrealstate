@@ -135,18 +135,23 @@ class CalculationCenterTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('admin.calculations.index'))
             ->assertOk()
-            // Wired as of Phase 6.
+            // Wired as of Phase 8.
             ->assertSee('Calculate Direct')
             ->assertSee('Calculate Upline')
+            ->assertSee('Calculate Team Sales')
+            ->assertSee('Calculate One Month Target')
             // Still to come, labelled with their delivering phase.
-            ->assertSee('Calculate Team Targets')
+            ->assertSee('Calculate Two Month Target')
+            ->assertSee('Calculate Three Month Target')
             ->assertSee('Calculate Company Club')
             ->assertSee('Calculate All')
-            ->assertSee('Phase 8')
+            ->assertSee('Phase 9')
+            ->assertSee('Phase 10')
             ->assertSee('Phase 11')
             ->assertSee('Phase 12')
-            // Upline must no longer be advertised as unavailable.
-            ->assertDontSee('Phase 6');
+            // Delivered engines must no longer be advertised as unavailable.
+            ->assertDontSee('Phase 6')
+            ->assertDontSee('Phase 8');
     }
 
     #[Test]

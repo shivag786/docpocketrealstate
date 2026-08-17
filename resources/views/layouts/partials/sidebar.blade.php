@@ -22,7 +22,18 @@
         ],
         'Rewards' => [
             ['label' => 'Calculations', 'icon' => 'bi-calculator', 'route' => 'admin.calculations.index', 'active' => 'admin.calculations.*', 'phase' => 12],
-            ['label' => 'Targets', 'icon' => 'bi-bullseye', 'route' => null, 'phase' => 8],
+            [
+                'label' => 'One Month Target',
+                'icon' => 'bi-bullseye',
+                'active' => 'admin.targets.*',
+                'phase' => 8,
+                'children' => [
+                    ['label' => 'Achieved', 'route' => 'admin.targets.achieved', 'active' => 'admin.targets.achieved', 'phase' => 8],
+                    ['label' => 'Not Reached', 'route' => 'admin.targets.missed', 'active' => 'admin.targets.missed', 'phase' => 8],
+                ],
+            ],
+            ['label' => 'Two Month Target', 'icon' => 'bi-bullseye', 'route' => null, 'phase' => 9],
+            ['label' => 'Three Month Target', 'icon' => 'bi-bullseye', 'route' => null, 'phase' => 10],
             ['label' => 'Upline Rewards', 'icon' => 'bi-arrow-up-circle', 'route' => 'admin.calculations.upline.ledger', 'phase' => 6],
             ['label' => 'Company Club', 'icon' => 'bi-award', 'route' => null, 'phase' => 11],
             ['label' => 'Reward Ledger', 'icon' => 'bi-journal-text', 'route' => null, 'phase' => 13],
@@ -46,9 +57,41 @@
             <div class="nav-section">{{ $section }}</div>
 
             @foreach ($items as $item)
-                @php $isActive = $item['route'] && request()->routeIs($item['active'] ?? $item['route']); @endphp
+                @php
+                    $isActive = ! empty($item['route']) && request()->routeIs($item['active'] ?? $item['route']);
+                    $hasChildren = ! empty($item['children']);
+                    // A parent counts as open when any of its pages is showing.
+                    $groupOpen = $hasChildren && request()->routeIs($item['active']);
+                @endphp
 
-                @if ($item['route'])
+                @if ($hasChildren)
+                    @php $groupId = 'nav-group-'.\Illuminate\Support\Str::slug($item['label']); @endphp
+
+                    <a href="#{{ $groupId }}"
+                       class="nav-link nav-group-toggle {{ $groupOpen ? 'active' : 'collapsed' }}"
+                       data-bs-toggle="collapse"
+                       role="button"
+                       aria-expanded="{{ $groupOpen ? 'true' : 'false' }}"
+                       aria-controls="{{ $groupId }}">
+                        <i class="bi {{ $item['icon'] }}"></i>
+                        <span>{{ $item['label'] }}</span>
+                        <i class="bi bi-chevron-down ms-auto nav-group-caret"></i>
+                    </a>
+
+                    <div class="collapse {{ $groupOpen ? 'show' : '' }}" id="{{ $groupId }}">
+                        <div class="nav flex-column nav-submenu">
+                            @foreach ($item['children'] as $child)
+                                @php $childActive = request()->routeIs($child['active'] ?? $child['route']); @endphp
+
+                                <a href="{{ route($child['route']) }}"
+                                   class="nav-link {{ $childActive ? 'active' : '' }}"
+                                   @if ($childActive) aria-current="page" @endif>
+                                    <span>{{ $child['label'] }}</span>
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                @elseif ($item['route'])
                     <a href="{{ route($item['route']) }}"
                        class="nav-link {{ $isActive ? 'active' : '' }}"
                        @if ($isActive) aria-current="page" @endif>

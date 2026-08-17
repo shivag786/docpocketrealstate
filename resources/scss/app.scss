@@ -116,6 +116,43 @@ body {
     letter-spacing: 0.08em;
     color: rgba(255, 255, 255, 0.4);
   }
+
+  // A parent item that opens a submenu. It is a toggle, not a destination —
+  // the pages live underneath it.
+  .nav-group-toggle {
+    .nav-group-caret {
+      font-size: 0.7rem;
+      transition: transform 0.15s ease;
+    }
+
+    &.collapsed .nav-group-caret {
+      transform: rotate(-90deg);
+    }
+
+    // An open parent is highlighted, but never as strongly as the child page
+    // actually being viewed — otherwise two things look "current" at once.
+    &.active:not(.collapsed) {
+      background: var(--app-sidebar-hover);
+      box-shadow: none;
+      color: #fff;
+    }
+  }
+
+  .nav-submenu .nav-link {
+    padding-left: 2.75rem;
+    font-size: 0.85rem;
+
+    // Aligns the child labels under the parent's text rather than its icon.
+    &::before {
+      content: '';
+      position: absolute;
+      left: 1.5rem;
+      width: 0.4rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.25);
+    }
+
+    position: relative;
+  }
 }
 
 .app-content {
@@ -465,4 +502,76 @@ input[data-numeric] {
 .required-mark::after {
   content: " *";
   color: $danger;
+}
+
+// --- Target contribution tree -------------------------------------------
+// The team tree behind one target verdict. Server-rendered and fully expanded:
+// zero-selling branches are pruned away before it reaches the page, so what
+// remains is only the working behind the measured figure.
+.target-tree {
+  .tree-children {
+    margin-left: 1.1rem;
+    padding-left: 0.9rem;
+  }
+}
+
+.target-node {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.7rem;
+  margin: 0.3rem 0;
+  border: 1px solid $gray-300;
+  border-left: 3px solid $gray-400;
+  border-radius: $border-radius;
+  background: #fff;
+
+  &.is-subject {
+    border-left-color: $primary;
+    background: rgba(27, 77, 143, 0.04);
+  }
+
+  // A member who sold nothing themselves but whose downline did. They are shown
+  // because the tree needs them to connect the sellers below.
+  &.is-passthrough {
+    border-style: dashed;
+    background: $gray-100;
+  }
+
+  .target-node-identity {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow-wrap: anywhere;
+  }
+
+  .target-node-figures {
+    flex: 0 0 auto;
+    text-align: right;
+    line-height: 1.25;
+  }
+
+  // The member's personal sale, deliberately quiet next to the team figure.
+  .target-node-own {
+    font-size: 0.75rem;
+    color: $gray-600;
+  }
+}
+
+@include media-breakpoint-down(md) {
+  .target-node {
+    flex-wrap: wrap;
+
+    .target-node-identity {
+      flex: 1 1 100%;
+    }
+
+    .target-node-figures {
+      text-align: left;
+    }
+  }
+
+  .target-tree .tree-children {
+    margin-left: 0.4rem;
+    padding-left: 0.55rem;
+  }
 }

@@ -20,12 +20,48 @@ Divide the entire pool equally by the actual eligible count.
 Upline is independent of target achievement.
 
 ## 3. Team Target
-Each member/Team Leader has an independent target.
+Each member has an independent target.
 Target sales = own sales + all connected downline sales.
 Target 1 = 5,000 Sq.Ft. / 1 month. On achievement, reward = 5,000 × ₹30 = ₹150,000.
-Target 2 = 10,000 Sq.Ft. / 2 months, cumulative/carry-forward.
-Target 3 = 35,000 Sq.Ft. / 3 months, cumulative/carry-forward.
+Target 2 = 10,000 Sq.Ft. / 2 months.
+Target 3 = 35,000 Sq.Ft. / 3 months.
 Target failure does not remove Direct or Upline rewards.
+
+### 3.1 Target rules — client-confirmed 2026-08-17
+
+**Measurement window.** A target period is always the **1st to the last day of a
+calendar month**. It is never a rolling window. A member who joins mid-month is
+measured to that same month-end — the threshold is NOT pro-rated for the short
+first period.
+
+**Reward is fixed at the threshold, never scaled.** A team doing 7,000 Sq.Ft.
+against Target 1 is paid on 5,000, not 7,000 — ₹150,000, not ₹210,000.
+
+**The overshoot is lost.** The extra 2,000 in that example is discarded. It does
+not carry into Target 2, which starts from zero.
+*(This narrows "cumulative/carry-forward" as originally written above: carry-forward
+means progress ACCUMULATES ACROSS THE MONTHS INSIDE one multi-month target, not
+that surplus rolls between targets.)*
+
+**Everyone is measured, not only Team Leaders.** A member with no downline who
+sells 5,000 Sq.Ft. on their own achieves Target 1 and is paid. This overrides the
+reading of §4 that only a Team Leader receives a team calculation.
+
+**Progression is sequential and gated.**
+- Every member starts on Target 1.
+- Miss it → the same target simply repeats next month. Retries are unlimited and
+  carry no penalty.
+- Achieve it → it pays **once, and never again for that member**. Target 2 opens
+  and becomes their active target. Target 3 opens the same way after Target 2.
+- A member is being measured against exactly ONE target at a time.
+
+**Target 2 and Target 3 figures are admin-configured.** Their Sq.Ft. thresholds
+and their ₹-per-Sq.Ft. multipliers are set by the admin in settings rather than
+fixed in code. 10,000 / 35,000 are the documented starting values.
+
+**Member status is not consulted.** The Target engine measures and pays regardless
+of Active/Inactive. See the open question in `PROJECT_STATE.md` — it has no live
+effect because no member is expected to be set inactive.
 
 ## 4. Team Leader
 A member with at least one referred member is a Team Leader. Each Team Leader gets an independent team calculation.

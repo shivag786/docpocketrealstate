@@ -103,7 +103,11 @@
                                 @endif
                             </td>
                             <td class="text-end">
-                                <span class="badge text-bg-light border">Phase 8</span>
+                                <a href="{{ route('admin.targets.show', [$row->leader_id, 'period' => $period]) }}"
+                                   class="btn btn-sm btn-outline-secondary"
+                                   title="One Month Target verdict for this member">
+                                    <i class="bi bi-bullseye"></i>
+                                </a>
                             </td>
                         </tr>
                     @empty

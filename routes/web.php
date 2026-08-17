@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\ProjectController;
 use App\Http\Controllers\Admin\PropertyController;
 use App\Http\Controllers\Admin\RegistrySaleController;
 use App\Http\Controllers\Admin\SponsorSearchController;
+use App\Http\Controllers\Admin\TargetController;
 use App\Http\Controllers\Admin\TreeController;
 use App\Http\Controllers\Auth\LoginController;
 use Illuminate\Support\Facades\Route;
@@ -78,6 +79,16 @@ Route::middleware(['auth', 'active'])->group(function () {
                 Route::get('team/contributors/{member}', [CalculationController::class, 'teamContributors'])
                     ->name('team.contributors');
                 Route::get('runs/{run}', [CalculationController::class, 'show'])->name('show');
+            });
+
+            // One Month Target (Target 1). Two report pages over one period —
+            // achieved and not reached — plus the per-member team tree that
+            // explains the verdict.
+            Route::prefix('targets')->name('targets.')->group(function () {
+                Route::get('/', [TargetController::class, 'achieved'])->name('achieved');
+                Route::get('not-reached', [TargetController::class, 'missed'])->name('missed');
+                Route::post('run', [TargetController::class, 'run'])->name('run');
+                Route::get('member/{member}', [TargetController::class, 'show'])->name('show');
             });
 
             // Sponsor tree. Nodes and search are AJAX; the downline listing is a

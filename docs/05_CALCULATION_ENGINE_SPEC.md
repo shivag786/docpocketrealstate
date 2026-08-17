@@ -33,6 +33,20 @@ Target 3: 35,000 / 3 months, cumulative monthly progress.
 Target reward is created only after achievement.
 Target failure does not remove Direct or Upline rewards.
 
+Confirmed 2026-08-17 (full statement in `02_BUSINESS_RULES.md` §3.1):
+
+1. Period = calendar month, 1st to last day. Never rolling. Mid-month joiners are
+   measured to the same month-end with no pro-rating.
+2. `reward = threshold_sqft × rate` — the THRESHOLD, never the achieved figure.
+   7,000 against Target 1 pays 5,000 × 30.
+3. Surplus above the threshold is discarded, not carried to the next target.
+4. Every member is measured, including members with no downline.
+5. One active target per member. Fail → repeat the same target next month,
+   unlimited retries. Achieve → pay once, permanently advance to the next target.
+   A target never pays the same member twice.
+6. Target 2 and 3 thresholds and rates come from admin settings, not from code.
+7. Member Active/Inactive status is not consulted.
+
 ## E. Company Club
 `company_sqft = SUM(all approved member sales for period)`
 `club_amount = company_sqft × 30`

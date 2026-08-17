@@ -12,6 +12,7 @@ use App\Models\TeamCalculation;
 use App\Models\UplineCalculation;
 use App\Services\CalculationRunService;
 use App\Services\DirectRewardService;
+use App\Services\TargetRewardService;
 use App\Services\TeamSalesService;
 use App\Services\UplineRewardService;
 use Illuminate\Http\RedirectResponse;
@@ -32,6 +33,7 @@ class CalculationController extends Controller
         private readonly DirectRewardService $direct,
         private readonly UplineRewardService $upline,
         private readonly TeamSalesService $team,
+        private readonly TargetRewardService $targets,
         private readonly CalculationRunService $runs,
     ) {}
 
@@ -47,6 +49,7 @@ class CalculationController extends Controller
             $preview = $this->direct->preview($period);
             $uplinePreview = $this->upline->preview($period);
             $teamPreview = $this->team->preview($period);
+            $targetPreview = $this->targets->preview($period);
         } catch (Throwable $e) {
             $error = $e->getMessage();
         }
@@ -56,10 +59,12 @@ class CalculationController extends Controller
             'preview' => $preview,
             'uplinePreview' => $uplinePreview,
             'teamPreview' => $teamPreview ?? null,
+            'targetPreview' => $targetPreview ?? null,
             'previewError' => $error,
             'directRun' => $this->runs->completedRun($period, CalculationRunType::Direct),
             'uplineRun' => $this->runs->completedRun($period, CalculationRunType::Upline),
             'teamRun' => $this->runs->completedRun($period, CalculationRunType::TeamSales),
+            'targetRun' => $this->runs->completedRun($period, CalculationRunType::Target),
             'runs' => CalculationRun::with('initiatedBy:id,name')
                 ->latest('id')
                 ->limit(10)

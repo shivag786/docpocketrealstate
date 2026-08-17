@@ -4,19 +4,21 @@ This is the single source of truth for current development progress.
 Claude MUST update it after every task/phase.
 
 ## Current phase
-Phase 7 — Team Sales
+Phase 8 — Target 1 (One Month Target)
 
 ## Current status
 COMPLETE — awaiting client sign-off
 
 ## Last completed task
-Phase 7 — Team Sales rollup engine.
+Phase 8 — Target 1 engine plus the One Month Target screens.
 
 ## Last update
-2026-08-15 23:40
+2026-08-17
 
 ## Current objective
-Rahul/A/B/C sample totals reconcile. **Achieved.**
+A team reaching 5,000 Sq.Ft. in a calendar month is paid ₹150,000, once.
+**Achieved** — verified live: RS4 did 5,000.50 in 2026-08 and was paid ₹150,000,
+with the 0.50 surplus discarded.
 
 ## Completed phases
 - [x] Phase 1 — Foundation
@@ -26,7 +28,7 @@ Rahul/A/B/C sample totals reconcile. **Achieved.**
 - [x] Phase 5 — Direct Reward
 - [x] Phase 6 — Upline
 - [x] Phase 7 — Team Sales
-- [ ] Phase 8 — Target 1
+- [x] Phase 8 — Target 1
 - [ ] Phase 9 — Target 2
 - [ ] Phase 10 — Target 3
 - [ ] Phase 11 — Company Club
@@ -38,7 +40,111 @@ Rahul/A/B/C sample totals reconcile. **Achieved.**
 - [ ] Phase 17 — QA/Deployment
 
 ## Current task
-None. Phase 7 delivered; Phase 8 not started (and blocked — see below).
+None. Phase 8 delivered. Phase 9 (Two Month Target) is next and needs the admin
+settings screen, because its threshold and rate are admin-configured.
+
+## Phase 8 notes
+
+**Targets are judged on the Team Sales run, not recomputed.** `TargetRewardService`
+reads `team_calculations` for the period and refuses to run until Team Sales has
+been calculated. Recomputing the rollup independently would let the Target report
+and the Team Sales report disagree about the same month — the one divergence a
+reward system cannot afford. Cost: an ordering dependency (Team Sales, then
+Target), stated in the error message and in the Calculation Center.
+
+**Paying once, ever, is enforced twice.** The engine skips members who already
+hold an achievement, and `target_calculations` carries `achieved_level` — set to
+the target level on a win and NULL on a miss — under a unique index on
+`(member_id, achieved_level)`. MySQL permits unlimited NULLs in a unique index, so
+misses never collide, but a second Target 1 achievement by the same member is
+physically impossible whatever order the periods are calculated in. Both the guard
+and the backstop are tested.
+
+**The ledger row records the THRESHOLD Sq.Ft., not what was sold.** RS4 sold
+5,000.50 and the ledger says `sqft = 5000.00, rate = 30, amount = 150000.00`, so
+`sqft × rate = amount` holds on every target row. Recording 5,000.50 would have
+broken that identity and made Phase 13 reconciliation lie. The Sq.Ft. actually
+sold lives on `target_calculations.achieved_sqft`.
+
+**`team_calculations.target_sqft / achieved / reward_amount` are still NULL.**
+Phase 7 reserved them for this engine; they were deliberately not used.
+`target_calculations` owns the verdict because it also carries the run, the frozen
+threshold and rate, and the once-ever guard — none of which the reserved columns
+could hold. Writing the verdict in two places would only invite drift. Those three
+columns are now dead and can be dropped in a later cleanup migration.
+
+**The threshold and rate are frozen onto every row**, exactly like the Direct
+rate. When Phases 9-10 make targets admin-configurable, editing a setting cannot
+retroactively change a verdict already recorded.
+
+**The tree prunes silence.** The member detail page draws the branch as a tree
+with each member's Sq.Ft., but branches that sold nothing in the period are
+removed — they explain nothing about the figure the page exists to explain. The
+count of omitted members is printed rather than hidden. Members who sold nothing
+themselves but have a selling downline ARE kept, marked "no personal sale", because
+the tree needs them to connect the sellers below. The root's subtree total equals
+`achieved_sqft`, and the page flags it if the live tree ever disagrees with the
+recorded run (which happens when sales are entered after a run — see the
+recalculation blocker).
+
+## Files changed in Phase 8
+**Created**
+- `app/Services/TargetRewardService.php`
+- `app/Models/TargetCalculation.php`
+- `app/Http/Controllers/Admin/TargetController.php`
+- migration `create_target_calculations_table`
+- `resources/views/admin/targets/index.blade.php`, `show.blade.php`, `_node.blade.php`
+- `tests/Feature/Reward/TargetRewardTest.php` (32), `TargetPagesTest.php` (15)
+
+**Modified**
+- `app/Http/Controllers/Admin/CalculationController.php` — target preview and run card
+- `resources/views/admin/calculations/index.blade.php` — "Calculate One Month Target"
+  wired; Targets 2/3 listed as Phases 9/10
+- `resources/views/admin/calculations/team.blade.php` — the Target column now links
+  to the verdict instead of showing a "Phase 8" badge
+- `resources/views/layouts/partials/sidebar.blade.php` — **submenu support added**
+  (`children` on a nav item renders a Bootstrap collapse); One Month Target carries
+  Achieved and Not Reached beneath it
+- `resources/scss/app.scss` — sidebar submenu and target tree styling
+- `routes/web.php`, `config/rewards.php`
+- `tests/Feature/Reward/CalculationCenterTest.php` — Target is no longer "coming in
+  Phase 8"
+
+## Target decisions (client-confirmed 2026-08-17)
+
+These answer pending questions 5–8. Full statement in `02_BUSINESS_RULES.md` §3.1.
+
+1. **Period = calendar month, 1st to last day.** Never a rolling window. A member
+   who joins mid-month is measured to that same month-end; the threshold is NOT
+   pro-rated for the short first period.
+2. **Reward is fixed at the threshold.** 7,000 Sq.Ft. against Target 1 pays
+   5,000 × ₹30 = ₹150,000, not ₹210,000.
+3. **Surplus is discarded.** The extra 2,000 does not carry into Target 2, which
+   starts from zero. Carry-forward means progress accumulating across the months
+   INSIDE one multi-month target — never surplus rolling between targets.
+4. **Every member is measured**, including a member with no downline who reaches
+   5,000 on their own sales. This overrides the reading of business rules §4 that
+   only Team Leaders get a team calculation.
+5. **Progression is sequential and gated.** Everyone starts on Target 1. Failure
+   repeats the same target next month, unlimited retries, no penalty. Achievement
+   pays **once per member ever** and permanently advances them to the next target.
+   A member is measured against exactly one target at a time.
+6. **Target 2 and 3 thresholds AND rates are admin-configured**, not code
+   constants. Deferred to Phases 9–10 at the client's request — they want Target 1
+   verified first.
+7. **Member status is not consulted** by the Target engine.
+
+**Assumption flagged, not confirmed:** ₹30 is confirmed only for Target 1. The
+rate for Targets 2 and 3 has never been stated. `config/rewards.php` carries 30
+forward as a *seed default* for the future settings table, marked as unconfirmed.
+
+**Still open (asked, deliberately deferred by the client):** whether the Inactive
+member status should be removed entirely. The answer "no inactive team member and
+no option to make any member inactive" conflicts with Phase 2 decision #4 and with
+Phase 6's upline compression, which exists only to skip inactive uplines and has 6
+tests. The client chose to ignore the question for now, so **nothing was changed**:
+status stays, compression keeps working, and the Target engine ignores status. No
+live effect — only RS12 "Demo C (inactive)", a seeded demo member, is inactive.
 
 ## Phase 7 notes
 
@@ -369,7 +475,39 @@ level 2. RS8 (Deepak Joshi) and RS9 (Priya Nair) were created by Claude during P
 verification and can be deleted if unwanted.
 
 ## Tests
-254 passed, 800 assertions, 0 failures (PHPUnit 12.5.33, ~14 s).
+301 passed, 975 assertions, 0 failures (PHPUnit 12.5.33, ~33 s).
+
+**Phase 8 (47)**
+
+*Engine (32)* — exactly 5,000 achieves and pays ₹150,000, while 4,999.99 is a miss
+short by 0.01; **7,000 against 5,000 pays 150,000 and explicitly not 210,000**, with
+the 2,000 surplus recorded as unpaid; the ledger row carries the threshold so
+`sqft × rate = amount`; the surplus does not carry into the next month; a mid-month
+joiner gets the full un-prorated threshold; 3,000 in late June plus 3,000 in early
+July reaches 5,000 in a rolling window but achieves **neither** calendar month; the
+1st and last day of the month both count; a member with no downline achieves on
+their own sales; a member achieves entirely on downline sales; one sale achieves the
+target independently for all three members above it (3 × ₹150,000); a miss is
+recorded without penalty and the threshold is never raised; unlimited retries;
+an achiever is never measured again even in a 20,000 month; the database itself
+refuses a second achievement; many misses by one member do not collide in the unique
+index; member status has no effect; the engine refuses to run before Team Sales; a
+second run is refused; run totals reconcile to the ledger; a miss writes no ledger
+row; every reward traces to its verdict; Direct and Upline are undisturbed; the
+preview writes nothing; members with no sales are not measured; the tree total equals
+the measured figure; silent branches are pruned and counted; a non-selling member is
+kept when their downline sold; no depth limit; a structural test asserting no
+dependency on the Direct or Upline engines.
+
+*Screens (15)* — guests blocked on all four routes; Achieved lists only winners and
+Not Reached only the shortfalls; both pages show the individual's own sale beside the
+team figure; the month filter switches periods; an invalid period falls back to the
+current month instead of erroring; clicking a member draws their whole branch as a
+tree; the tree omits silent members and says how many; the detail page states that a
+surplus is not paid and that a miss carries no penalty; uncalculated periods are
+warned about; running redirects to Achieved; running before Team Sales reports the
+reason; the sidebar carries both pages under One Month Target; target history lists
+every month measured.
 
 **Phase 7 (17)**
 - The Rahul/A/B/C sample reconciles exactly: Rahul 5,000 (own 1,000, direct 2,500),
@@ -507,10 +645,17 @@ protection, mid-session deactivation, AJAX envelope contract.
 - Vite production build succeeds
 
 ## Known issues/blockers
-**Phase 8 (Target 1) is BLOCKED** on questions 5–8 below. The threshold and reward for
-Target 1 are confirmed (5,000 Sq.Ft. → ₹150,000), but the cycle start rule, whether the
-reward is fixed or scales, and what happens on failure are all undefined — and Target 2
-and 3 have no documented reward at all.
+**Phase 9 (Target 2) needs the admin settings screen first.** The client confirmed
+that Target 2 and 3 thresholds AND rates are admin-configured, so Phase 9 cannot be
+built against config constants the way Phase 8 was. The settings table must carry
+effective-from dates, because `target_calculations` freezes the threshold and rate
+per verdict and historical runs must stay reproducible. The ₹30 rate currently in
+`config/rewards.php` for Targets 2 and 3 is **carried over from Target 1 as a seed
+default and is NOT client-confirmed**.
+
+**Target ordering dependency.** A Target run requires a completed Team Sales run for
+the same period, by design (see Phase 8 notes). "Calculate All" in Phase 12 must run
+Team Sales before Target or it will fail.
 
 **UNANSWERED, raised three times — the upline pool source.** The client wrote "upline
 amount calculated - prashant sqft × 50", where prashant is the UPLINE, not the seller.
@@ -519,13 +664,13 @@ was meant, every upline figure for June, July and August is wrong and must be
 recalculated. A test (`the_pool_comes_from_the_seller_not_the_upline`) pins the current
 behaviour so the change would be contained.
 
-**Two Phase 7 items flagged but not confirmed:**
-1. An INACTIVE member's sales still count toward their leader's team total. Reasoning: a
-   completed sale happened, and member status governs who *receives* an upline share
-   rather than whether a sale is measured. Not explicitly confirmed. It matters from
-   Phase 8, where team totals start paying money.
-2. Inactive members still receive a team calculation row of their own (RS12 in the live
-   data has a 2,300 team total). Same question, other side.
+**The two Phase 7 inactive-member items were raised again and deliberately deferred**
+by the client ("can we ignore this"). Nothing was changed: an inactive member's sales
+still count toward their leader's team total, an inactive leader still gets rows, and
+the Target engine ignores status entirely — an inactive member can achieve Target 1
+and be paid. No live effect, because only RS12 "Demo C (inactive)" (a seeded demo
+member) is inactive and the client does not intend to deactivate anyone. A test pins
+the current behaviour so a reversal would be contained.
 
 **Recalculation still unavailable (Phase 12)** and now spans three engines. Live effect:
 sale #4 (RS6) has upline and team figures but no direct reward, because it was entered
@@ -584,16 +729,12 @@ member status values — see "Phase 2 decisions" above.
 Resolved in Phase 4: approval workflow, the period date, required sale fields and
 editability — see "Phase 4 decisions" above.
 
-**Before Phases 8–10 (Targets)**
-5. Reward amounts for Target 2 and Target 3 — never stated in any document. Only
-   Target 1 is confirmed (5,000 × ₹30 = ₹150,000).
-6. Is the target reward fixed at the threshold, or does it scale with actual Sq.Ft.?
-   (Team does 7,000 against Target 1: ₹150,000 or ₹210,000?)
-7. When does a target cycle start — joining month, first sale month, or admin-opened
-   month? Rolling window or fixed calendar months?
-8. Progression: does Target 2 unlock only after Target 1 is achieved? Does its 10,000
-   include the 5,000 already counted, or start fresh? What happens on failure?
+**Before Phases 8–10 (Targets) — questions 5–8 RESOLVED 2026-08-17.**
+See "Target decisions" above and `02_BUSINESS_RULES.md` §3.1. Phase 8 is unblocked.
+
 9. Team sales depth — unlimited, or capped at 5 levels like the upline rule?
+   Phase 7 built it UNLIMITED. Still not explicitly confirmed, and it now decides
+   money, because the team total is what Target 1 tests against.
 
 **Before Phase 11 / Settings**
 10. Can the four rates (₹40 / ₹50 / ₹30 / ₹30) ever change? If yes they need a table
@@ -604,14 +745,27 @@ editability — see "Phase 4 decisions" above.
     member login later is additive and does not invalidate Phase 1.
 
 ## Last known good state
-Phase 7 complete. Two reward engines plus the team measurement layer:
+Phase 8 complete. Three reward engines plus the team measurement layer:
 
 - **Direct** — own approved Sq.Ft. × ₹40, one ledger row per sale
 - **Upline** — seller's monthly Sq.Ft. × ₹50, split among up to 5 active uplines
 - **Team Sales** — own + all connected downline, unlimited depth, pays nobody
+- **Target 1** — team Sq.Ft. ≥ 5,000 in a calendar month → ₹150,000, once per member
 
-254 passing tests. Live data covers June, July and August 2026.
+301 passing tests. Live data covers June, July and August 2026.
 
+Verified live across all three months (runs #10-12): 7 members measured in June and
+July with no achievers (best team 2,300 and 3,500 against 5,000), and 11 measured in
+August with exactly one achiever. **RS4 (shiva gupta) did 5,000.50 Sq.Ft. — 3,500.50
+of it personally — and was paid ₹150,000, not ₹150,015.** The 0.50 surplus was
+discarded, the ledger row reads `sqft 5,000.00 × rate 30.00 = 150,000.00`, and the
+contribution tree totals 5,000.50, matching the measured figure exactly.
+
+The Achieved page shows RS4 with ₹150,000 and "own sale 3,500.50"; the Not Reached
+page shows the other 10 with their shortfalls; RS4 correctly appears on neither
+the other page nor any later month.
+
+### Earlier state (Phase 7)
 Verified live: June company sales 2,300 Sq.Ft. reconcile exactly against the sum of
 `own_sqft` across all leaders, while the sum of `total_team_sqft` is 15,300 — inflated
 by chain height exactly as expected and warned about in the UI.

@@ -52,19 +52,29 @@ return [
     |
     | Target sales = own sales + all connected downline sales.
     |
-    | OPEN QUESTIONS (must be answered before Phases 9 and 10):
-    |   - reward amounts for Target 2 and Target 3 are not documented anywhere
-    |   - whether reward is fixed at the threshold or scales with actual Sq.Ft.
-    |   - cycle start rule, progression/unlock order and carry-forward behaviour
+    | Client-confirmed 2026-08-17 (docs/02_BUSINESS_RULES.md §3.1):
+    |   - the period is a calendar month, 1st to last day, never a rolling window
+    |   - reward = THRESHOLD sqft x rate, never the achieved sqft. 7,000 against
+    |     Target 1 pays 5,000 x 30, and the surplus 2,000 is discarded
+    |   - every member is measured, not only Team Leaders
+    |   - one active target at a time. Failure repeats the same target next month
+    |     with unlimited retries; achievement pays ONCE and advances the member
+    |     permanently to the next target
     |
-    | Only Target 1's reward is confirmed: 5,000 x 30 = 150,000.
+    | Target 1's figures are CONFIRMED: 5,000 x 30 = 150,000.
+    |
+    | Target 2 and 3 are admin-configured (Phase 9/10). Their thresholds (10,000 /
+    | 35,000) are documented, but their RATE never was — the 30 below is carried
+    | over from Target 1 as a seed default and is NOT client-confirmed. Once the
+    | settings table exists it becomes the live source and these values only seed
+    | it. Do not pay Target 2 or 3 from this array.
     |
     */
 
     'targets' => [
-        1 => ['sqft' => 5_000, 'months' => 1, 'reward' => 150_000],
-        2 => ['sqft' => 10_000, 'months' => 2, 'reward' => null],
-        3 => ['sqft' => 35_000, 'months' => 3, 'reward' => null],
+        1 => ['sqft' => 5_000, 'months' => 1, 'rate' => 30, 'reward' => 150_000],
+        2 => ['sqft' => 10_000, 'months' => 2, 'rate' => 30, 'reward' => 300_000],
+        3 => ['sqft' => 35_000, 'months' => 3, 'rate' => 30, 'reward' => 1_050_000],
     ],
 
     /*
