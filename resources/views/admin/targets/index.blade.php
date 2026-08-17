@@ -13,6 +13,30 @@
 @endsection
 
 @section('page-actions')
+    @if (! $periodLocked)
+        <form method="POST" action="{{ route('admin.targets.recalculate') }}" class="d-inline">
+            @csrf
+            <input type="hidden" name="period" value="{{ $period }}">
+            <button type="submit" class="btn btn-sm btn-outline-secondary"
+                    data-confirm-submit="Rebuild every figure for {{ $period }} from the sales on record?">
+                <i class="bi bi-arrow-repeat me-1"></i>Recalculate
+            </button>
+        </form>
+    @endif
+
+    @if ($showingAchieved && $payment['unpaid'] > 0)
+        <form method="POST" action="{{ route('admin.targets.paid-all') }}" class="d-inline">
+            @csrf
+            <input type="hidden" name="period" value="{{ $period }}">
+            <button type="submit" class="btn btn-sm btn-success"
+                    @disabled(! $payable)
+                    @if (! $payable) title="{{ $paymentBlockedReason }}" @endif
+                    data-confirm-submit="Confirm all {{ $payment['unpaid'] }} unpaid target rewards for {{ $period }} (₹{{ number_format((float) $payment['unpaid_amount'], 2) }}) as paid? This locks the whole month against recalculation.">
+                <i class="bi bi-cash-stack me-1"></i>Mark all paid ({{ $payment['unpaid'] }})
+            </button>
+        </form>
+    @endif
+
     <a href="{{ route('admin.calculations.team.report', ['period' => $period]) }}"
        class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-people me-1"></i>Team sales
@@ -63,19 +87,53 @@
         </div>
     </div>
 
+    {{-- Where this month stands: still moving, ready to pay, or locked. --}}
+    @if ($periodLocked)
+        <div class="alert alert-success d-flex align-items-start gap-2">
+            <i class="bi bi-lock-fill mt-1"></i>
+            <div>
+                <strong>{{ $period }} is locked.</strong>
+                {{ $payment['paid'] }} of {{ $payment['total'] }} target
+                {{ Str::plural('reward', $payment['total']) }} marked paid
+                (₹{{ number_format((float) $payment['paid_amount'], 2) }}).
+                <div class="small mt-1">
+                    Figures no longer recalculate, because that would rewrite an amount
+                    somebody has been paid. A sale entered into this month will still be
+                    recorded, but it will not move these numbers.
+                </div>
+            </div>
+        </div>
+    @elseif (! $payable)
+        <div class="alert alert-info d-flex align-items-start gap-2">
+            <i class="bi bi-hourglass-split mt-1"></i>
+            <div>
+                <strong>{{ $period }} is still running — these figures are provisional.</strong>
+                <div class="small mt-1">
+                    Every sale entered recalculates this month straight away, so a member
+                    shown as achieved can still change until the month ends. Payment opens
+                    once {{ $period }} is over.
+                </div>
+            </div>
+        </div>
+    @endif
+
     @if (! $run)
         <div class="alert alert-warning d-flex align-items-start gap-2">
             <i class="bi bi-exclamation-triangle mt-1"></i>
             <div>
                 <strong>Target 1 has not been calculated for {{ $period }}.</strong>
                 <div class="small mt-1">
-                    Nothing below is a verdict until the calculation is run.
-                    <a href="{{ route('admin.calculations.index', ['period' => $period]) }}">
-                        Go to the Calculation Center
-                    </a>
-                    — Team Sales must be calculated for the month first, because targets are
-                    judged on the figures that run produces.
+                    Figures normally rebuild the moment a sale is entered. If this month
+                    predates that, recalculate it now:
                 </div>
+                <form method="POST" action="{{ route('admin.targets.recalculate') }}" class="mt-2">
+                    @csrf
+                    <input type="hidden" name="period" value="{{ $period }}">
+                    <button type="submit" class="btn btn-sm btn-warning"
+                            data-confirm-submit="Rebuild every figure for {{ $period }} from the sales on record?">
+                        <i class="bi bi-arrow-repeat me-1"></i>Recalculate {{ $period }}
+                    </button>
+                </form>
             </div>
         </div>
     @endif
@@ -86,7 +144,10 @@
             ['Measured', number_format($measured), 'bi-people', 'members on Target 1 this month'],
             ['Achieved', number_format($achievedCount), 'bi-check-circle', 'reached ' . number_format((float) $targetSqft, 0) . ' Sq.Ft.'],
             ['Not reached', number_format($missedCount), 'bi-x-circle', 'retry next month'],
-            ['Total reward', '₹' . number_format((float) $totalAmount, 2), 'bi-cash-coin', 'threshold × ₹' . number_format((float) $rewardAmount / max((float) $targetSqft, 1), 0)],
+            ['Total reward', '₹' . number_format((float) $totalAmount, 2), 'bi-cash-coin',
+                $payment['paid'] > 0
+                    ? '₹' . number_format((float) $payment['paid_amount'], 2) . ' paid, ₹' . number_format((float) $payment['unpaid_amount'], 2) . ' outstanding'
+                    : ($payable ? 'none paid yet' : 'provisional until month end')],
         ] as [$label, $value, $icon, $hint])
             <div class="col-6 col-xl-3">
                 <div class="card stat-card h-100">
@@ -133,6 +194,9 @@
                         <th style="min-width: 9rem;">Progress</th>
                         <th class="text-end">{{ $showingAchieved ? 'Surplus (not paid)' : 'Short by' }}</th>
                         <th class="text-end">Reward</th>
+                        @if ($showingAchieved)
+                            <th>Payment</th>
+                        @endif
                         <th></th>
                     </tr>
                 </thead>
@@ -195,6 +259,45 @@
                                     <span class="text-muted">—</span>
                                 @endif
                             </td>
+
+                            @if ($showingAchieved)
+                                @php $reward = $rewards->get($row->id); @endphp
+                                <td>
+                                    @if (! $reward)
+                                        <span class="badge text-bg-light border">no ledger row</span>
+                                    @elseif ($reward->isPaid())
+                                        <span class="badge text-bg-success">
+                                            <i class="bi bi-check-lg"></i> Paid
+                                        </span>
+                                        <div class="small text-muted">
+                                            {{ $reward->paid_at?->format('d M Y') }}
+                                            @if ($reward->paidBy)
+                                                by {{ $reward->paidBy->name }}
+                                            @endif
+                                        </div>
+                                    @else
+                                        {{-- Disabled by default: a month still running has
+                                             figures that can change, so nothing is payable
+                                             until it ends. --}}
+                                        <form method="POST"
+                                              action="{{ route('admin.targets.paid', $reward) }}"
+                                              class="d-inline">
+                                            @csrf
+                                            <button type="submit"
+                                                    class="btn btn-sm btn-outline-success"
+                                                    @disabled(! $payable)
+                                                    @if (! $payable) title="{{ $paymentBlockedReason }}" @endif
+                                                    data-confirm-submit="Confirm ₹{{ number_format((float) $reward->amount, 2) }} paid to {{ $row->member->member_code }} for {{ $period }}? This freezes the amount and locks the whole month against recalculation.">
+                                                <i class="bi bi-cash-coin me-1"></i>Mark paid
+                                            </button>
+                                        </form>
+                                        @unless ($payable)
+                                            <div class="small text-muted">month not over</div>
+                                        @endunless
+                                    @endif
+                                </td>
+                            @endif
+
                             <td class="text-end">
                                 <a href="{{ route('admin.targets.show', [$row->member_id, 'period' => $period]) }}"
                                    class="btn btn-sm btn-outline-primary"
@@ -205,7 +308,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-5">
+                            <td colspan="{{ $showingAchieved ? 8 : 7 }}" class="text-center text-muted py-5">
                                 <i class="bi {{ $showingAchieved ? 'bi-bullseye' : 'bi-emoji-neutral' }} fs-2 d-block mb-2 opacity-50"></i>
                                 @if (! $run)
                                     Target 1 has not been calculated for {{ $period }}.

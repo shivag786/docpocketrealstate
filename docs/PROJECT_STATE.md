@@ -475,7 +475,22 @@ level 2. RS8 (Deepak Joshi) and RS9 (Priya Nair) were created by Claude during P
 verification and can be deleted if unwanted.
 
 ## Tests
-301 passed, 975 assertions, 0 failures (PHPUnit 12.5.33, ~33 s).
+325 passed, 1,062 assertions, 0 failures (PHPUnit 12.5.33, ~19 s).
+
+**Recalculation and payment (24)** — the reported defect pinned: a sale entered
+after a calculation is picked up, and entering one through the form recalculates
+with no explicit call; recalculation covers all four engines, not just Direct;
+running it three times leaves one set of results, not duplicates; a target
+achievement can appear and disappear while the month is unpaid; previous runs are
+superseded rather than deleted and own no ledger rows; a reward starts unpaid; a
+month still running cannot be paid; paying records who and when; the same reward
+cannot be paid twice; a paid reward locks its whole month, freezing Direct and
+Upline with it; a sale into a locked month is still recorded with the reason
+reported; Mark All Paid; the payment summary separates paid from outstanding; a
+locked month that drifts is reported as stale while an up-to-date one is not; the
+Mark Paid button is disabled while the month runs and available once it ends; the
+screen refuses to pay a running month; guests are blocked; only target rewards are
+payable through the target screen.
 
 **Phase 8 (47)**
 
@@ -644,6 +659,39 @@ protection, mid-session deactivation, AJAX envelope contract.
 - List search and status filter both narrow correctly; sidebar highlights Members
 - Vite production build succeeds
 
+## Live recalculation and payment (client-confirmed 2026-08-17)
+
+Reported as "when add property sales then why it is not calculating into target
+and each place". It was real: results were frozen snapshots and a completed run
+refused to re-run, so **₹256,020 of direct rewards sat unpaid** on five August
+sales entered after the run closed. Fixed, and the model changed with it.
+
+1. **Figures follow the sales.** Entering a sale rebuilds every engine for its
+   month immediately, in dependency order, inside one transaction. Team Sales
+   always precedes Target.
+2. **A month is provisional until it ends.** Verdicts may appear and disappear as
+   sales arrive. The screens say so.
+3. **Payment is the commit point.** Mark Paid is disabled while a month is running
+   and unlocks once it is over. Confirming a payment freezes the amount.
+4. **A paid reward locks its whole month.** Period-wide, not per reward type — the
+   four engines describe one month between them, so recalculating Team Sales after
+   a target reward was paid would move the ground the payment stood on.
+5. **A sale is never lost to a recalculation failure.** The sale is the fact and
+   the figures are derived. Into a locked month the sale still records and the
+   operator is told the figures did not move.
+6. **Superseded runs are kept.** Their results are deleted but the run rows record
+   who calculated what and when. 12 exist in live data.
+
+**Assumption flagged, not separately confirmed:** "mark paid button will be
+disable default" is implemented as *disabled while the month is still running*,
+unlocking at month end — reading it together with "until month end". If a
+different gate was meant (for example, always disabled until some other approval),
+only `RewardPaymentService::periodIsPayable()` changes.
+
+**Not yet built:** Direct and Upline have no Mark Paid screen. Payment is wired on
+`reward_ledger` generally but surfaced only on the target pages, as asked. The
+Reward Ledger screen (Phase 13) is where the other two belong.
+
 ## Known issues/blockers
 **Phase 9 (Target 2) needs the admin settings screen first.** The client confirmed
 that Target 2 and 3 thresholds AND rates are admin-configured, so Phase 9 cannot be
@@ -672,15 +720,11 @@ and be paid. No live effect, because only RS12 "Demo C (inactive)" (a seeded dem
 member) is inactive and the client does not intend to deactivate anyone. A test pins
 the current behaviour so a reversal would be contained.
 
-**Recalculation still unavailable (Phase 12)** and now spans three engines. Live effect:
-sale #4 (RS6) has upline and team figures but no direct reward, because it was entered
-after the August Direct run closed.
-
-**Recalculation still unavailable (Phase 12).** A completed run blocks a second run for
-the same period and type. Sales entered after a period has been calculated will not
-appear in rewards until controlled recalculation exists. This already affects the live
-data: sale #4 (RS6) was entered after the 2026-08 Direct run, so it has an upline reward
-but no direct reward.
+**RESOLVED 2026-08-17 — recalculation.** Both notes below described sales that never
+reached the ledger because a completed run refused to re-run. Recalculation now
+happens automatically on sale entry (see "Live recalculation and payment" above),
+and all three live months were rebuilt. Every approved sale now has a direct
+reward: 0 missing, ledger ₹548,020 against 13,700.50 Sq.Ft. × ₹40 exactly.
 
 No defects were found during Phase 6.
 

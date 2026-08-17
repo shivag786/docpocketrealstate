@@ -3,30 +3,40 @@
 namespace App\Enums;
 
 /**
- * OPEN QUESTION: the documentation defines a `status` column on reward_ledger
- * but never its values, and there is no payment or settlement workflow anywhere
- * in the business rules.
+ * The life of a reward amount.
  *
- * `Posted` is therefore the only state: the reward has been calculated and
- * recorded. States such as Paid, Held or Reversed are NOT invented here — they
- * would each need a confirmed rule about when they apply and what they do to
- * reconciliation.
+ * Client-confirmed 2026-08-17: a reward is calculated continuously as sales
+ * arrive and stays PROVISIONAL for the whole month — every recalculation may
+ * change it. It becomes real only when an admin explicitly confirms payment.
+ *
+ * `Posted` therefore means "calculated, and still free to change". `Paid` means
+ * an admin confirmed it, and from that moment the amount is frozen: the period
+ * it belongs to can no longer be recalculated.
+ *
+ * Still deliberately NOT invented: Held, Reversed, Cancelled. Each would need a
+ * confirmed rule about when it applies and what it does to reconciliation.
  */
 enum LedgerStatus: string
 {
+    /** Calculated. Provisional — recalculation may still change or remove it. */
     case Posted = 'posted';
+
+    /** Payment confirmed by an admin. Frozen; locks its period. */
+    case Paid = 'paid';
 
     public function label(): string
     {
         return match ($this) {
-            self::Posted => 'Posted',
+            self::Posted => 'Not paid',
+            self::Paid => 'Paid',
         };
     }
 
     public function badgeClass(): string
     {
         return match ($this) {
-            self::Posted => 'text-bg-success',
+            self::Posted => 'text-bg-secondary',
+            self::Paid => 'text-bg-success',
         };
     }
 }

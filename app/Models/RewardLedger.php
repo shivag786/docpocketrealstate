@@ -36,6 +36,7 @@ class RewardLedger extends Model
             'sqft' => 'decimal:2',
             'rate' => 'decimal:2',
             'amount' => 'decimal:2',
+            'paid_at' => 'datetime',
         ];
     }
 
@@ -43,6 +44,33 @@ class RewardLedger extends Model
     public function member(): BelongsTo
     {
         return $this->belongsTo(Member::class);
+    }
+
+    /**
+     * The staff member who confirmed the payment.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function paidBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'paid_by');
+    }
+
+    public function isPaid(): bool
+    {
+        return $this->status === LedgerStatus::Paid;
+    }
+
+    /** @param  Builder<RewardLedger>  $query */
+    public function scopePaid(Builder $query): void
+    {
+        $query->where('status', LedgerStatus::Paid);
+    }
+
+    /** @param  Builder<RewardLedger>  $query */
+    public function scopeUnpaid(Builder $query): void
+    {
+        $query->where('status', LedgerStatus::Posted);
     }
 
     /** @return BelongsTo<CalculationRun, $this> */

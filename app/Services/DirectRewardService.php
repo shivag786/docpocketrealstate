@@ -51,6 +51,24 @@ class DirectRewardService
     }
 
     /**
+     * Recalculate the period from the sales as they stand now.
+     *
+     * The previous run's ledger rows are deleted and rewritten. Direct rewards
+     * live entirely in `reward_ledger`, which `CalculationRunService` clears for
+     * us, so this engine has nothing of its own to discard.
+     */
+    public function recalculate(string $period, User $initiatedBy): CalculationRun
+    {
+        return $this->runs->execute(
+            $period,
+            CalculationRunType::Direct,
+            $initiatedBy,
+            fn (CalculationRun $run) => $this->post($period, $run),
+            fn (string $p) => null,
+        );
+    }
+
+    /**
      * @return array{records: int, sqft: string, amount: string}
      */
     private function post(string $period, CalculationRun $run): array

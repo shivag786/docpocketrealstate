@@ -43,6 +43,24 @@ class UplineRewardService
         private readonly CalculationRunService $runs,
     ) {}
 
+    /**
+     * Recalculate the period from the sales as they stand now.
+     *
+     * Discards this engine's own working (`upline_calculations`) as well as the
+     * ledger rows, so the recorded share-by-share explanation always describes
+     * the amounts currently on the ledger.
+     */
+    public function recalculate(string $period, User $initiatedBy): CalculationRun
+    {
+        return $this->runs->execute(
+            $period,
+            CalculationRunType::Upline,
+            $initiatedBy,
+            fn (CalculationRun $run) => $this->post($period, $run),
+            fn (string $p) => UplineCalculation::where('period', $p)->delete(),
+        );
+    }
+
     public function calculate(string $period, User $initiatedBy): CalculationRun
     {
         return $this->runs->execute(

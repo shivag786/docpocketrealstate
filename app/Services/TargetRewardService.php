@@ -75,6 +75,32 @@ class TargetRewardService
     }
 
     /**
+     * Recalculate the period's verdicts from the sales as they stand now.
+     *
+     * Deleting this period's rows also releases any achievement recorded in it,
+     * because the once-ever guard lives in those rows. That is deliberate: while
+     * a month is still provisional an achievement can appear and disappear as
+     * sales arrive. Once a target reward is PAID the period locks and this
+     * refuses to run, so a paid achievement can never be taken away.
+     *
+     * Chronology note: an achievement already held in a DIFFERENT period still
+     * blocks a new one here. Back-dating a sale into an earlier month therefore
+     * leaves the achievement attributed to the month it was first earned in
+     * rather than moving it. Nobody is ever paid twice, which is the property
+     * that matters.
+     */
+    public function recalculate(string $period, User $initiatedBy): CalculationRun
+    {
+        return $this->runs->execute(
+            $period,
+            CalculationRunType::Target,
+            $initiatedBy,
+            fn (CalculationRun $run) => $this->post($period, $run),
+            fn (string $p) => TargetCalculation::where('period', $p)->delete(),
+        );
+    }
+
+    /**
      * @return array{records: int, sqft: string, amount: string}
      */
     private function post(string $period, CalculationRun $run): array

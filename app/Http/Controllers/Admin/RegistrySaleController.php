@@ -7,6 +7,7 @@ use App\Http\Requests\Sale\StoreRegistrySaleRequest;
 use App\Models\Member;
 use App\Models\Project;
 use App\Models\RegistrySale;
+use App\Services\PeriodRecalculationService;
 use App\Services\RegistrySaleService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ class RegistrySaleController extends Controller
 {
     public function __construct(
         private readonly RegistrySaleService $sales,
+        private readonly PeriodRecalculationService $recalculations,
     ) {}
 
     /**
@@ -49,19 +51,42 @@ class RegistrySaleController extends Controller
             return back()->withInput()->with('error', $e->getMessage());
         }
 
+        // Every engine for this sale's month is rebuilt immediately, so the
+        // Direct, Upline, Team and Target figures always match the sales on
+        // record. The sale itself is already saved and is never rolled back by
+        // a recalculation problem — the reason is surfaced instead.
+        $recalculation = $this->recalculations->afterSale($sale, $request->user());
+
         $sale->load('member:id,member_code,name');
+
+        $message = sprintf(
+            'Sale recorded: %s Sq.Ft. for %s (%s) — direct reward ₹%s.%s',
+            number_format((float) $sale->sqft, 2),
+            $sale->member->name,
+            $sale->member->member_code,
+            number_format((float) $sale->sqft * (float) config('rewards.rates.direct'), 2),
+            $sale->registry_reference ? " Registry {$sale->registry_reference}." : '',
+        );
 
         // Return to the entry form, not the record: staff enter sales in runs,
         // and the spec asks the form to stay ready for the next one.
-        return redirect()
-            ->route('admin.sales.create')
-            ->with('success', sprintf(
-                'Sale recorded: %s Sq.Ft. for %s (%s) — direct reward ₹%s.%s',
-                number_format((float) $sale->sqft, 2),
-                $sale->member->name,
-                $sale->member->member_code,
-                number_format((float) $sale->sqft * (float) config('rewards.rates.direct'), 2),
-                $sale->registry_reference ? " Registry {$sale->registry_reference}." : '',
+        $redirect = redirect()->route('admin.sales.create');
+
+        if ($recalculation['recalculated']) {
+            return $redirect->with('success', $message.sprintf(
+                ' All %s figures recalculated.',
+                $sale->registry_date->format('Y-m'),
+            ));
+        }
+
+        // The sale is recorded either way. Say plainly that the figures did not
+        // move and why, rather than letting them drift out of step in silence.
+        return $redirect
+            ->with('success', $message)
+            ->with('error', sprintf(
+                'Figures for %s were NOT updated. %s',
+                $sale->registry_date->format('Y-m'),
+                $recalculation['reason'],
             ));
     }
 

@@ -31,6 +31,81 @@ Chronological project history. Claude must append an entry after each meaningful
 
 ---
 
+### 2026-08-17 — Live recalculation and payment confirmation
+
+**Defect reported by the client:** a sale entered after a month had been
+calculated never reached any reward. Confirmed on live data — sale #11 was entered
+at 16:35, four hours after the August target run closed at 12:42. **₹256,020 of
+direct rewards were unpaid and invisible** across five August sales.
+
+The engines always read the database; the results were frozen snapshots and a
+completed run refused to run again. Recalculation was deferred to Phase 12, which
+made ordinary data entry silently wrong.
+
+**Added**
+- `PeriodRecalculationService` — rebuilds all four engines for a period in
+  dependency order (Team Sales before Target) inside one transaction, so a month
+  is never left with a fresh Direct total beside a stale Target verdict
+- Entering a sale now recalculates its month immediately. No button to remember
+- `RewardPaymentService` — Mark Paid confirmation, disabled until the month ends
+- `LedgerStatus::Paid`, `CalculationRunStatus::Superseded`
+- Mark Paid per achiever and Mark All Paid per month on the target screens, with
+  paid-by and paid-at shown; a manual Recalculate control for older months
+- `stalePeriods()` — reports any month whose stored figures no longer match its sales
+
+**Changed**
+- `CalculationRunService::execute()` takes an optional `clear` callback. Supplying
+  it switches from first-time calculation to recalculation: previous results are
+  deleted and previous runs marked superseded rather than the second run being
+  refused
+- Each engine gained `recalculate()`, declaring which of its own rows to discard
+- Target screens show whether a month is provisional, payable, or locked
+
+**Database**
+- `reward_ledger` gains `paid_at`, `paid_by`, and a `(period, status)` index
+- `calculation_runs` gains `superseded_at`
+
+**Tests**
+- 24 new tests (325 total, 1,062 assertions, all passing)
+- The reported defect is pinned: a sale entered after a calculation is picked up,
+  and entering one through the form recalculates with no explicit call
+- Recalculating three times leaves exactly one set of results, not duplicates
+- A target achievement can appear and disappear while the month is unpaid
+- A paid reward locks its whole month; a sale into a locked month is still
+  recorded and the reason reported rather than swallowed
+- Mark Paid is disabled while a month is running and available once it is over
+
+**Manual verification**
+- All three live months recalculated. **August Direct went from ₹60,000 on
+  1,500 Sq.Ft. to ₹316,020 on 7,900.50** — the missing ₹256,020 is now on the ledger
+- Every approved sale now has a direct reward: 0 missing, and the ledger totals
+  ₹548,020 against 13,700.50 Sq.Ft. × ₹40 exactly
+- RS4's August target figure corrected from a stale 5,000.50 to 6,200.50
+- 12 superseded runs kept as history; `stalePeriods()` reports nothing
+- August shows "still running — provisional" with Mark Paid disabled, as today is
+  2026-08-17 and the month is not over
+
+**Decision**
+- Client-confirmed 2026-08-17: figures recalculate on every sale entry and stay
+  provisional until month end; Mark Paid is disabled by default and needs explicit
+  admin confirmation
+- The lock is period-wide, not per reward type: one confirmed payment freezes the
+  whole month. The four engines describe one month between them, so recalculating
+  Team Sales after a target reward was paid would move the ground the payment
+  stood on
+- The sale is the fact and the figures are derived, so a recalculation failure
+  never rolls back a sale — the reason is surfaced instead
+- **Assumption flagged:** "mark paid button will be disable default" is implemented
+  as disabled while the month is still running, unlocking once it ends. This reads
+  "until month end" as the intent; say so if a different gate was meant
+
+**Issues**
+- Direct and Upline rewards have no Mark Paid screen yet — payment is wired on the
+  ledger generally but surfaced only on the target pages, as asked. The Reward
+  Ledger screen (Phase 13) is where the other two belong
+
+---
+
 ### 2026-08-17 — Phase 8 — Target 1 (One Month Target)
 
 **Added**

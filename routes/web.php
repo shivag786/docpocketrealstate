@@ -88,6 +88,16 @@ Route::middleware(['auth', 'active'])->group(function () {
                 Route::get('/', [TargetController::class, 'achieved'])->name('achieved');
                 Route::get('not-reached', [TargetController::class, 'missed'])->name('missed');
                 Route::post('run', [TargetController::class, 'run'])->name('run');
+
+                // Figures rebuild automatically on sale entry; this forces it
+                // for months calculated before that existed.
+                Route::post('recalculate', [TargetController::class, 'recalculate'])->name('recalculate');
+
+                // Payment confirmation — the point a provisional figure becomes
+                // final and locks its month against recalculation.
+                Route::post('paid/{reward}', [TargetController::class, 'markPaid'])->name('paid');
+                Route::post('paid-all', [TargetController::class, 'markAllPaid'])->name('paid-all');
+
                 Route::get('member/{member}', [TargetController::class, 'show'])->name('show');
             });
 

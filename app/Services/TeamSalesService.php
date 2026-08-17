@@ -52,6 +52,24 @@ class TeamSalesService
     }
 
     /**
+     * Re-roll the whole network for the period from the sales as they stand now.
+     *
+     * This engine pays nobody, so nothing here is money — but the Target engine
+     * is judged on these figures, which is why a period holding a paid target
+     * reward refuses to recalculate at all.
+     */
+    public function recalculate(string $period, User $initiatedBy): CalculationRun
+    {
+        return $this->runs->execute(
+            $period,
+            CalculationRunType::TeamSales,
+            $initiatedBy,
+            fn (CalculationRun $run) => $this->post($period, $run),
+            fn (string $p) => TeamCalculation::where('period', $p)->delete(),
+        );
+    }
+
+    /**
      * @return array{records: int, sqft: string, amount: string}
      */
     private function post(string $period, CalculationRun $run): array
