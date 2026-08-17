@@ -7,20 +7,27 @@
     </button>
 
     {{--
-        Global search (Member ID, name, mobile, sponsor ID, registry number,
-        property code) is specified in docs/04_UI_UX_SPECIFICATION.md but has
-        nothing to search until members and sales exist in Phases 2 and 4.
+        Member search — code, name, mobile or email, the fields staff actually
+        search by. It runs against the member list's own search, so there is one
+        definition of "matches" rather than a second one here.
+
+        docs/04_UI_UX_SPECIFICATION.md also asks this to reach registry numbers
+        and property codes. Those live on their own filtered lists today; folding
+        them into one result set is a Reports/Phase 14 concern.
     --}}
-    <div class="flex-grow-1 d-none d-md-block" style="max-width: 420px;">
+    <form method="GET" action="{{ route('admin.members.index') }}"
+          class="flex-grow-1 d-none d-md-block" style="max-width: 420px;"
+          role="search">
         <div class="input-group input-group-sm">
             <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
             <input type="search"
+                   name="search"
+                   value="{{ request()->routeIs('admin.members.index') ? request('search') : '' }}"
                    class="form-control"
-                   placeholder="Global search available from Phase 2"
-                   aria-label="Global search"
-                   disabled>
+                   placeholder="Search members by code, name or mobile"
+                   aria-label="Search members">
         </div>
-    </div>
+    </form>
 
     <div class="ms-auto dropdown">
         <button class="btn btn-sm btn-light dropdown-toggle d-flex align-items-center gap-2"

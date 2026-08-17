@@ -89,7 +89,9 @@ class RegistrySale extends Model
      */
     public function scopeApproved(Builder $query): void
     {
-        $query->where('status', SaleStatus::Approved);
+        // Table-qualified: `members` also has a `status` column, so any caller
+        // that joins it would otherwise hit "column 'status' is ambiguous".
+        $query->where($query->qualifyColumn('status'), SaleStatus::Approved);
     }
 
     /**
@@ -105,15 +107,19 @@ class RegistrySale extends Model
     {
         [$year, $month] = array_map('intval', explode('-', $period));
 
-        $query->whereYear('registry_date', $year)
-            ->whereMonth('registry_date', $month);
+        // Qualified for the same reason as scopeApproved: these scopes are used
+        // on queries that join other tables.
+        $query->whereYear($query->qualifyColumn('registry_date'), $year)
+            ->whereMonth($query->qualifyColumn('registry_date'), $month);
     }
 
     /** @param  Builder<RegistrySale>  $query */
     public function scopeBetweenDates(Builder $query, ?string $from, ?string $to): void
     {
-        $query->when($from, fn (Builder $q) => $q->whereDate('registry_date', '>=', $from))
-            ->when($to, fn (Builder $q) => $q->whereDate('registry_date', '<=', $to));
+        $column = $query->qualifyColumn('registry_date');
+
+        $query->when($from, fn (Builder $q) => $q->whereDate($column, '>=', $from))
+            ->when($to, fn (Builder $q) => $q->whereDate($column, '<=', $to));
     }
 
     /** @param  Builder<RegistrySale>  $query */

@@ -65,17 +65,16 @@
             </li>
         @endforeach
 
+        {{-- Delivered elsewhere: link out rather than showing a dead tab. --}}
         @foreach ([
-            ['Sales', 'bi-receipt', 4],
-            ['Targets', 'bi-bullseye', 8],
-            ['Reward Ledger', 'bi-journal-text', 13],
-        ] as [$label, $icon, $phase])
+            ['Sales', 'bi-receipt', route('admin.sales.index', ['member' => $member->member_code])],
+            ['Targets', 'bi-bullseye', route('admin.targets.show', $member)],
+        ] as [$label, $icon, $url])
             <li class="nav-item" role="presentation">
-                <button class="nav-link disabled" type="button" disabled
-                        title="Delivered in Phase {{ $phase }}">
+                <a class="nav-link" href="{{ $url }}">
                     <i class="bi {{ $icon }} me-1"></i>{{ $label }}
-                    <span class="badge text-bg-light border ms-1">P{{ $phase }}</span>
-                </button>
+                    <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                </a>
             </li>
         @endforeach
     </ul>
@@ -128,24 +127,54 @@
 
                 <div class="col-12 col-lg-6">
                     <div class="card h-100">
-                        <div class="card-header bg-white"><strong>Performance</strong></div>
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                            <strong>Performance</strong>
+                            <span class="small text-muted">{{ \Illuminate\Support\Carbon::parse($performance['period'].'-01')->format('F Y') }}</span>
+                        </div>
                         <ul class="list-group list-group-flush small">
+                            <li class="list-group-item d-flex justify-content-between">
+                                <span class="text-muted">Own monthly Sq.Ft.</span>
+                                <span class="fw-semibold tabular">{{ number_format((float) $performance['own_sqft'], 2) }}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between">
+                                <span class="text-muted">Team monthly Sq.Ft.</span>
+                                <span class="fw-semibold tabular">{{ number_format((float) $performance['team_sqft'], 2) }}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Target progress</span>
+                                <span class="text-end">
+                                    @if ($performance['graduated'])
+                                        <span class="badge text-bg-success">Target 1 achieved</span>
+                                    @elseif ($performance['target'])
+                                        <span class="fw-semibold tabular">
+                                            {{ number_format((float) $performance['target']->achieved_sqft, 2) }}
+                                            / {{ number_format((float) $performance['target_sqft'], 0) }}
+                                        </span>
+                                        <span class="d-block text-body-tertiary">
+                                            {{ number_format($performance['target']->progressPercent(), 1) }}%
+                                        </span>
+                                    @else
+                                        <span class="text-body-tertiary">not measured this month</span>
+                                    @endif
+                                </span>
+                            </li>
                             @foreach ([
-                                ['Own monthly Sq.Ft.', 4],
-                                ['Team monthly Sq.Ft.', 7],
-                                ['Target progress', 8],
-                                ['Direct reward', 5],
-                                ['Upline reward', 6],
-                            ] as [$label, $phase])
+                                ['Direct reward', $performance['direct']],
+                                ['Upline reward', $performance['upline']],
+                                ['Target reward', $performance['target_reward']],
+                            ] as [$label, $amount])
                                 <li class="list-group-item d-flex justify-content-between">
                                     <span class="text-muted">{{ $label }}</span>
-                                    <span class="badge text-bg-light border">Phase {{ $phase }}</span>
+                                    <span class="fw-semibold tabular {{ bccomp($amount, '0', 2) > 0 ? 'text-success' : 'text-body-tertiary' }}">
+                                        ₹{{ number_format((float) $amount, 2) }}
+                                    </span>
                                 </li>
                             @endforeach
                         </ul>
-                        <div class="card-footer bg-white small text-muted">
-                            No figure is shown until the engine that produces it exists.
-                        </div>
+                        <a href="{{ route('admin.targets.show', [$member, 'period' => $performance['period']]) }}"
+                           class="card-footer engine-link">
+                            Target detail &amp; team tree <i class="bi bi-arrow-right ms-1"></i>
+                        </a>
                     </div>
                 </div>
             </div>

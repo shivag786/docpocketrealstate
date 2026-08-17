@@ -94,24 +94,48 @@
                 </ul>
             </div>
 
+            @php
+                $directAmount = bcmul($sale->sqft, (string) config('rewards.rates.direct'), 2);
+                $uplinePool = bcmul($sale->sqft, (string) config('rewards.rates.upline'), 2);
+            @endphp
+
             <div class="card">
                 <div class="card-header bg-white"><strong>Rewards from this sale</strong></div>
                 <ul class="list-group list-group-flush small">
-                    @foreach ([
-                        ['Direct reward (₹' . config('rewards.rates.direct') . '/Sq.Ft.)', 5],
-                        ['Upline reward (₹' . config('rewards.rates.upline') . ' pool)', 6],
-                        ['Counts toward team target', 7],
-                        ['Counts toward company club', 11],
-                    ] as [$label, $phase])
-                        <li class="list-group-item d-flex justify-content-between">
-                            <span class="text-muted">{{ $label }}</span>
-                            <span class="badge text-bg-light border">Phase {{ $phase }}</span>
-                        </li>
-                    @endforeach
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">
+                            Direct reward
+                            <span class="d-block text-body-tertiary">
+                                {{ number_format((float) $sale->sqft, 2) }} × ₹{{ config('rewards.rates.direct') }}
+                            </span>
+                        </span>
+                        <span class="fw-semibold text-success">₹{{ number_format((float) $directAmount, 2) }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">
+                            Upline pool from this Sq.Ft.
+                            <span class="d-block text-body-tertiary">
+                                split equally among up to {{ config('rewards.upline.max_levels') }} active uplines
+                            </span>
+                        </span>
+                        <span class="fw-semibold">₹{{ number_format((float) $uplinePool, 2) }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Counts toward team target</span>
+                        <span class="fw-semibold">
+                            {{ number_format((float) $sale->sqft, 2) }} Sq.Ft.
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Counts toward company club</span>
+                        <span class="badge text-bg-light border">not yet built</span>
+                    </li>
                 </ul>
                 <div class="card-footer bg-white small text-muted">
-                    This sale is recorded and approved. No reward is calculated until the
-                    engines exist.
+                    Figures shown are what this sale contributes. The upline pool is split
+                    across the seller's chain rather than paid to one member, and the
+                    seller's own monthly total drives it — see the
+                    <a href="{{ route('admin.calculations.upline.explain', [$sale->member_id, 'period' => $sale->registry_date->format('Y-m')]) }}">upline explorer</a>.
                 </div>
             </div>
 

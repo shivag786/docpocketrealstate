@@ -475,7 +475,18 @@ level 2. RS8 (Deepak Joshi) and RS9 (Priya Nair) were created by Claude during P
 verification and can be deleted if unwanted.
 
 ## Tests
-325 passed, 1,062 assertions, 0 failures (PHPUnit 12.5.33, ~19 s).
+343 passed, 1,135 assertions, 0 failures (PHPUnit 12.5.33, ~20 s).
+
+**Direct Sale report + dashboard (18)** — the page opens on today; the row
+multiplication is exact (1,234.56 × 40 = 49,382.40); the total covers all 30
+matching sales while page one shows 25; the member filter defaults to everyone and
+narrows on request; explicit date ranges and quick presets; all six documented page
+sizes offered and an undocumented one rejected; pagination keeps the filters;
+sorting works both directions; an unknown sort column is ignored rather than
+trusted; a malformed date does not break the page; an empty day explains how to
+widen the view. Dashboard: real figures rather than placeholders; delivered
+features advertise no build phase; unbuilt ones still say when they arrive; the
+trend chart offers a table view.
 
 **Recalculation and payment (24)** — the reported defect pinned: a sale entered
 after a calculation is picked up, and entering one through the form recalculates
@@ -658,6 +669,46 @@ protection, mid-session deactivation, AJAX envelope contract.
   its entire downline from results
 - List search and status filter both narrow correctly; sidebar highlights Members
 - Vite production build succeeds
+
+## Reporting and UI (2026-08-17)
+
+**Direct Sale report** — `/admin/rewards/direct-sales`, in the Rewards menu.
+Opens on **today** by client request. Date range (Today / Last 7 days / This month
+/ All time presets, or explicit from–to), member filter defaulting to all, page
+sizes 25 / 50 / 150 / 250 / 500 / 1000, sortable columns, and `Sq.Ft. × ₹40` worked
+out on every row. Totals cover the whole filtered set, not the visible page — a
+total that changed when you turned the page would be worse than none.
+
+The amount is computed from the sale rather than read from `reward_ledger`, so the
+page is honest even for an uncalculated month. The two agree in practice because
+sale entry recalculates.
+
+**Build-phase markers are gone from delivered features.** The dashboard, member
+profile and sale detail carried "Phase N" placeholders written when those engines
+did not exist. They now carry real figures. Screens that genuinely do not exist yet
+(Company Club, Reward Ledger, Reports, Audit, Settings) still state when they
+arrive so no menu item is a dead end — that distinction is covered by two opposing
+tests.
+
+**Dashboard** is driven by `DashboardMetricsService`, every figure read from the
+database. Hero band, tonal KPI tiles, per-engine cards with paid/outstanding
+meters, a six-month sales-trend column chart, top sellers, latest sales, and a
+stale-month warning that is normally empty.
+
+**Styling stays Bootstrap 5.** Tailwind was removed in Phase 1 and all ~35 Blade
+views are written in Bootstrap; re-adding it would mean two resets and two utility
+vocabularies on the same page. Asked about Tailwind, the client allowed Bootstrap
+if there was a problem — there is.
+
+**Chart colour** `#2a78d6`, validated for lightness band, chroma, colour-vision
+separation and contrast on the white card surface. Brand `#1b4d8f` fails the
+lightness band as a data mark, so it stays chrome-only.
+
+**Defect found and fixed:** `RegistrySale::approved()`, `forPeriod()` and
+`betweenDates()` used unqualified column names. `members` also has a `status`
+column, so any caller joining it failed with "column 'status' is ambiguous". Found
+by the dashboard's top-sellers query; the Direct Sale report would have hit it too.
+All three scopes are now table-qualified.
 
 ## Live recalculation and payment (client-confirmed 2026-08-17)
 

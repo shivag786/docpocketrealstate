@@ -504,6 +504,439 @@ input[data-numeric] {
   color: $danger;
 }
 
+// =======================================================================
+// Dashboard & report surfaces
+// =======================================================================
+// Bootstrap 5 throughout. Tailwind was removed in Phase 1 and re-adding it
+// would put two resets and two utility vocabularies on the same page — every
+// existing view is written in Bootstrap, so the cost lands as conflicts and
+// double payload, not polish. The premium look is built from Bootstrap's own
+// tokens instead.
+
+:root {
+  // One accent, used everywhere a value is plotted or emphasised. Validated
+  // against a white surface for contrast and colour-vision separation.
+  --chart-accent: #2a78d6;
+  --chart-grid: #e9ecef;
+  --chart-ink-muted: #6c757d;
+
+  --surface-ring: rgba(16, 32, 56, 0.08);
+  --surface-shadow: 0 1px 2px rgba(16, 32, 56, 0.04), 0 8px 24px -12px rgba(16, 32, 56, 0.18);
+  --surface-shadow-hover: 0 2px 4px rgba(16, 32, 56, 0.06), 0 16px 32px -14px rgba(16, 32, 56, 0.28);
+}
+
+// Columns of figures must align vertically; body text must not.
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.card {
+  border-color: var(--surface-ring);
+  box-shadow: var(--surface-shadow);
+}
+
+// --- Hero band ----------------------------------------------------------
+.hero-band {
+  border-radius: $border-radius * 2;
+  overflow: hidden;
+  border: 1px solid var(--surface-ring);
+  background: #fff;
+  box-shadow: var(--surface-shadow);
+}
+
+.hero-primary {
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #16345c 0%, $primary 55%, #2560a8 100%);
+  color: #fff;
+
+  .hero-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  // The one number the dashboard leads with.
+  .hero-figure {
+    font-size: clamp(1.9rem, 4vw, 2.75rem);
+    font-weight: 600;
+    line-height: 1.15;
+    margin: 0.35rem 0 0.25rem;
+  }
+
+  .hero-sub {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.8);
+  }
+}
+
+.hero-cell {
+  padding: 1.25rem 1.5rem;
+  border-left: 1px solid var(--surface-ring);
+
+  .hero-cell-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: $gray-600;
+  }
+
+  .hero-cell-value {
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin-top: 0.25rem;
+    overflow-wrap: anywhere;
+  }
+
+  .hero-cell-hint {
+    font-size: 0.78rem;
+    color: $gray-600;
+  }
+}
+
+@include media-breakpoint-down(sm) {
+  .hero-cell {
+    border-left: 0;
+    border-top: 1px solid var(--surface-ring);
+  }
+}
+
+@include media-breakpoint-down(lg) {
+  .hero-cell:first-child {
+    border-left: 0;
+  }
+}
+
+// --- Stat cards ---------------------------------------------------------
+.stat-card {
+  border-radius: $border-radius * 1.5;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+
+  .card-body > .d-flex > .bi {
+    font-size: 1.1rem;
+    color: $gray-500;
+  }
+
+  .stat-hint {
+    font-size: 0.78rem;
+    color: $gray-600;
+    margin-top: 0.15rem;
+  }
+
+  // A quiet colour bar so a row of tiles reads as a set without shouting.
+  &[class*="tone-"] {
+    border-top: 3px solid $gray-300;
+  }
+
+  @each $name, $color in (
+    "primary": $primary, "info": $info, "success": $success,
+    "warning": $warning, "secondary": $secondary
+  ) {
+    &.tone-#{$name} {
+      border-top-color: $color;
+
+      .card-body > .d-flex > .bi {
+        color: $color;
+      }
+    }
+  }
+}
+
+.stat-card-link {
+  text-decoration: none;
+  color: inherit;
+
+  &:hover,
+  &:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: var(--surface-shadow-hover);
+    border-color: rgba(27, 77, 143, 0.35);
+  }
+}
+
+.stat-card-accent {
+  background: linear-gradient(135deg, rgba(27, 77, 143, 0.06), rgba(27, 77, 143, 0));
+  border-color: rgba(27, 77, 143, 0.25);
+}
+
+// --- Reward engine cards ------------------------------------------------
+.engine-card {
+  border-radius: $border-radius * 1.5;
+  overflow: hidden;
+  border-top: 3px solid $gray-300;
+
+  .engine-title {
+    font-weight: 600;
+  }
+
+  .engine-basis {
+    font-size: 0.75rem;
+    color: $gray-600;
+  }
+
+  .engine-figure {
+    font-size: 1.6rem;
+    font-weight: 600;
+    margin-top: 0.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  .engine-caption {
+    font-size: 0.78rem;
+    color: $gray-600;
+  }
+
+  .engine-progress {
+    height: 0.4rem;
+    background: $gray-200;
+  }
+
+  @each $name, $color in (
+    "primary": $primary, "info": $info, "warning": $warning
+  ) {
+    &.tone-#{$name} {
+      border-top-color: $color;
+
+      .engine-title .bi { color: $color; }
+      .engine-progress .progress-bar { background-color: $color; }
+    }
+  }
+}
+
+.engine-link {
+  display: block;
+  background: #fff;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: $primary;
+
+  &:hover,
+  &:focus-visible {
+    background: $gray-100;
+    color: shade-color($primary, 15%);
+  }
+}
+
+// --- Sales trend chart --------------------------------------------------
+.trend-plot {
+  position: relative;
+  padding-left: 3.25rem;
+}
+
+.trend-grid {
+  position: absolute;
+  inset: 0 0 1.9rem 3.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.trend-grid-line {
+  position: relative;
+  border-top: 1px dashed var(--chart-grid);
+
+  // Axis ticks sit outside the plot so they never overlap a mark.
+  .trend-grid-label {
+    position: absolute;
+    right: calc(100% + 0.5rem);
+    top: -0.55rem;
+    font-size: 0.7rem;
+    color: var(--chart-ink-muted);
+    white-space: nowrap;
+  }
+}
+
+.trend-columns {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  height: 200px;
+}
+
+.trend-column {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.trend-bar-track {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: flex-end;
+}
+
+.trend-bar {
+  position: relative;
+  width: 100%;
+  // Rounded data-end, anchored square to the baseline.
+  border-radius: 4px 4px 0 0;
+  background: var(--chart-accent);
+  transition: filter 0.15s ease;
+  min-height: 0;
+
+  &:hover {
+    filter: brightness(1.12);
+  }
+
+  // The whole column is the hit target, not just the drawn bar.
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -100vh 0 0 0;
+  }
+}
+
+.trend-column.is-current .trend-bar {
+  // The month still in progress is marked as incomplete, not as smaller.
+  background: repeating-linear-gradient(
+    135deg,
+    var(--chart-accent),
+    var(--chart-accent) 6px,
+    #{mix(#2a78d6, #fff, 82%)} 6px,
+    #{mix(#2a78d6, #fff, 82%)} 12px
+  );
+}
+
+.trend-direct-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: $body-color;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.trend-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translate(-50%, -0.5rem);
+  display: none;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: $border-radius;
+  background: #1f2937;
+  color: #fff;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  z-index: 5;
+  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.5);
+}
+
+.trend-bar:hover .trend-tooltip,
+.trend-bar:focus-visible .trend-tooltip {
+  display: flex;
+}
+
+.trend-x-label {
+  height: 1.9rem;
+  padding-top: 0.4rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--chart-ink-muted);
+}
+
+.trend-now {
+  display: block;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--chart-accent);
+  font-weight: 600;
+}
+
+.trend-table summary {
+  cursor: pointer;
+}
+
+// --- Top sellers --------------------------------------------------------
+.leader-rank {
+  display: inline-block;
+  width: 1.35rem;
+  height: 1.35rem;
+  line-height: 1.35rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  background: $gray-200;
+  color: $gray-700;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.leader-progress {
+  height: 0.3rem;
+  background: $gray-200;
+
+  .progress-bar {
+    background-color: var(--chart-accent);
+  }
+}
+
+// --- Filter bar & sortable data tables ----------------------------------
+.filter-bar {
+  border-radius: $border-radius * 1.5;
+}
+
+.data-table {
+  thead th {
+    background: $gray-100;
+    border-bottom: 1px solid $gray-300;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: $gray-700;
+    white-space: nowrap;
+  }
+
+  .table-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: inherit;
+    text-decoration: none;
+
+    .bi {
+      font-size: 0.7rem;
+      opacity: 0.45;
+    }
+
+    &:hover .bi {
+      opacity: 1;
+    }
+  }
+
+  thead th.is-sorted {
+    color: $primary;
+
+    .table-sort .bi {
+      opacity: 1;
+    }
+  }
+
+  tfoot th {
+    background: $gray-100;
+    border-top: 2px solid $gray-300;
+  }
+}
+
+// Below md the table scrolls horizontally rather than crushing its columns.
+@include media-breakpoint-down(md) {
+  .data-table {
+    min-width: 34rem;
+  }
+}
+
 // --- Target contribution tree -------------------------------------------
 // The team tree behind one target verdict. Server-rendered and fully expanded:
 // zero-selling branches are pruned away before it reaches the page, so what

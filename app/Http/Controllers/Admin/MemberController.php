@@ -3,10 +3,16 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\MemberStatus;
+use App\Enums\RewardType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Member\StoreMemberRequest;
 use App\Http\Requests\Member\UpdateMemberRequest;
 use App\Models\Member;
+use App\Models\RegistrySale;
+use App\Models\RewardLedger;
+use App\Models\TargetCalculation;
+use App\Models\TeamCalculation;
+use App\Support\Money;
 use App\Services\DirectRewardService;
 use App\Services\MemberService;
 use App\Services\MemberTreeService;
@@ -84,6 +90,10 @@ class MemberController extends Controller
             'deletionBlockers' => $this->members->deletionBlockers($member),
             'directRewards' => app(DirectRewardService::class)->forMember($member),
             'uplineRewards' => app(UplineRewardService::class)->forMember($member),
+            // Live performance for the current month. Every engine that produces
+            // these exists now, so the panel shows figures instead of the phase
+            // that would one day deliver them.
+            'performance' => $this->performance($member),
         ]);
     }
 
@@ -122,5 +132,51 @@ class MemberController extends Controller
         return redirect()
             ->route('admin.members.index')
             ->with('success', "Member {$member->member_code} was deleted.");
+    }
+
+    /**
+     * This month's figures for one member, straight from the engines.
+     *
+     * Read from the stored calculations rather than recomputed, so the profile
+     * agrees with the reports. Every value may legitimately be zero — a member
+     * with no sales this month is a real state, not a missing figure.
+     *
+     * @return array<string, mixed>
+     */
+    private function performance(Member $member): array
+    {
+        $period = now()->format('Y-m');
+
+        $ownSqft = Money::of(
+            RegistrySale::query()->approved()->forPeriod($period)->where('member_id', $member->id)->sum('sqft')
+        );
+
+        $team = TeamCalculation::query()->forPeriod($period)->where('leader_id', $member->id)->first();
+        $target = TargetCalculation::query()->forPeriod($period)->where('member_id', $member->id)->first();
+
+        $rewardFor = fn (RewardType $type) => Money::of(
+            RewardLedger::query()
+                ->ofType($type)
+                ->forPeriod($period)
+                ->where('member_id', $member->id)
+                ->sum('amount')
+        );
+
+        return [
+            'period' => $period,
+            'own_sqft' => $ownSqft,
+            'team_sqft' => Money::of($team?->total_team_sqft ?? 0),
+            'target' => $target,
+            'target_sqft' => Money::of(config('rewards.targets.1.sqft')),
+            'direct' => $rewardFor(RewardType::Direct),
+            'upline' => $rewardFor(RewardType::Upline),
+            'target_reward' => $rewardFor(RewardType::Target),
+            // A member who has already achieved Target 1 is no longer measured
+            // against it, so the absence of a verdict is meaningful.
+            'graduated' => TargetCalculation::query()
+                ->where('member_id', $member->id)
+                ->whereNotNull('achieved_level')
+                ->exists(),
+        ];
     }
 }

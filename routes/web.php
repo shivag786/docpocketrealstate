@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\CalculationController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\DirectSaleController;
 use App\Http\Controllers\Admin\MemberController;
 use App\Http\Controllers\Admin\ProjectController;
 use App\Http\Controllers\Admin\PropertyController;
@@ -80,6 +81,10 @@ Route::middleware(['auth', 'active'])->group(function () {
                     ->name('team.contributors');
                 Route::get('runs/{run}', [CalculationController::class, 'show'])->name('show');
             });
+
+            // Reward reports. Direct Sale opens on today's entries.
+            Route::get('rewards/direct-sales', DirectSaleController::class)
+                ->name('rewards.direct-sales');
 
             // One Month Target (Target 1). Two report pages over one period —
             // achieved and not reached — plus the per-member team tree that

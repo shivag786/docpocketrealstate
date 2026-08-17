@@ -31,6 +31,74 @@ Chronological project history. Claude must append an entry after each meaningful
 
 ---
 
+### 2026-08-17 — Direct Sale report, live dashboard, UI pass
+
+**Added**
+- **Direct Sale** report under Rewards (`/admin/rewards/direct-sales`). Opens on
+  **today's** entries, because that is the question an operator has during the day
+- Every row works the reward out in the open: `Sq.Ft. × ₹40`, with totals covering
+  the whole filtered set rather than the visible page
+- Filters: date range (with Today / Last 7 days / This month / All time presets),
+  member (defaulting to all), rows per page (**25 / 50 / 150 / 250 / 500 / 1000**),
+  and sortable Date / Member / Sq.Ft. / Reward columns. Every filter survives
+  paging and sorting
+- `DashboardMetricsService` — real member, sales, reward and target figures
+- Sales-trend column chart, six months, built from HTML boxes so it reflows at
+  every width with no JavaScript; the month in progress is hatched rather than
+  drawn short, and a `<details>` table underneath carries the same data
+- Top sellers, latest sales, and a stale-month warning on the dashboard
+
+**Changed**
+- **Build-phase markers removed from everything delivered.** The dashboard's eight
+  "Available in Phase N" tiles now carry real numbers; the member profile's
+  Performance panel shows this month's own/team Sq.Ft., target progress and the
+  three reward amounts; the sale detail shows what that sale actually earned.
+  Items that genuinely do not exist yet still say when they arrive, so no menu
+  entry is a dead end
+- The topbar's permanently-disabled "Global search available from Phase 2" box is
+  now a working member search rather than relabelled dead chrome
+- Member profile's disabled Sales/Targets/Reward-Ledger tabs became links to the
+  screens that now exist
+- `RegistrySale::approved()`, `forPeriod()` and `betweenDates()` are table-
+  qualified. `members` also has a `status` column, so any caller joining it hit
+  "column 'status' is ambiguous" — found by the dashboard's top-sellers query
+- Premium Bootstrap pass: hero band, tonal stat cards, reward engine cards with
+  paid/outstanding meters, sortable table styling, softer elevation
+
+**Decision — Bootstrap, not Tailwind.** Tailwind was removed in Phase 1 in favour
+of Bootstrap 5, and every one of the ~35 existing Blade views is written in
+Bootstrap. Adding Tailwind back would put two CSS resets and two utility
+vocabularies on the same page: the cost lands as specificity conflicts and roughly
+doubled payload, not polish. The premium look is built from Bootstrap's own tokens.
+
+**Chart colour** is `#2a78d6`, validated for lightness band, chroma, colour-vision
+separation and contrast against the white card surface. The brand `#1b4d8f` failed
+the lightness band as a data mark and is kept for chrome only.
+
+**Tests**
+- 18 new tests (343 total, 1,135 assertions, all passing)
+- Direct Sale: opens on today; the row multiplication is exact (1,234.56 × 40 =
+  49,382.40); the total covers all 30 matching sales while page one shows 25; the
+  member filter defaults to everyone; explicit date ranges; every documented page
+  size offered and an undocumented one rejected; pagination keeps filters; sorting
+  both directions; an unknown sort column is ignored rather than trusted; a
+  malformed date does not break the page
+- Dashboard: real figures rather than placeholders, no phase markers on delivered
+  features, unbuilt features still say when they arrive, chart offers a table view
+
+**Manual verification**
+- Dashboard against live data: 16 members (15 active, 10 leaders), 11 sales /
+  13,700.50 Sq.Ft., Direct ₹548,020, Upline ₹434,999.99, Target ₹150,000, trend
+  Jun 2,300 → Jul 3,500 → Aug 7,900.50
+- Direct Sale page: 1 sale today, 6 this month, 11 all time — matching the
+  database, with the all-time total reading ₹548,020.00 against 13,700.50 Sq.Ft.
+
+**Issues**
+- Company Club (Phase 11) is the only dashboard figure still absent, because the
+  engine does not exist. It is not shown as an empty tile
+
+---
+
 ### 2026-08-17 — Live recalculation and payment confirmation
 
 **Defect reported by the client:** a sale entered after a month had been

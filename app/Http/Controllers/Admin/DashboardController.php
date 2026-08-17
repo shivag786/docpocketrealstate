@@ -3,21 +3,33 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Services\DashboardMetricsService;
+use App\Services\PeriodRecalculationService;
 use Illuminate\View\View;
 
+/**
+ * The dashboard.
+ *
+ * Every tile now carries a real figure. They were placeholders while the engines
+ * that produce them did not exist — inventing a number on a financial dashboard
+ * is worse than showing none — but Direct, Upline, Team Sales and Target are all
+ * live, so the dashes are gone.
+ */
 class DashboardController extends Controller
 {
-    /**
-     * Phase 1 renders the protected shell only.
-     *
-     * The KPI cards defined in docs/04_UI_UX_SPECIFICATION.md are deliberately
-     * left as placeholders: every figure they show (members, sales Sq.Ft.,
-     * direct, upline, target and club rewards) is produced by engines that do
-     * not exist until Phases 2-11. Wiring them now would mean inventing
-     * numbers, which docs/07_CLAUDE_WORKFLOW_PROMPT.md forbids.
-     */
+    public function __construct(
+        private readonly DashboardMetricsService $metrics,
+        private readonly PeriodRecalculationService $recalculations,
+    ) {}
+
     public function __invoke(): View
     {
-        return view('admin.dashboard');
+        return view('admin.dashboard', [
+            ...$this->metrics->all(),
+            // Months whose stored figures no longer match their sales. Normally
+            // empty, because entering a sale recalculates its month; it fills
+            // only when a month was locked by a payment.
+            'stalePeriods' => $this->recalculations->stalePeriods(),
+        ]);
     }
 }

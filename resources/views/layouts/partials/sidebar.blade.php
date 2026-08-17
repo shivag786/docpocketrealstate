@@ -2,9 +2,11 @@
     /**
      * Full navigation from docs/04_UI_UX_SPECIFICATION.md.
      *
-     * Items are declared up front so the information architecture is settled,
-     * but everything outside Phase 1 is rendered disabled and labelled with the
-     * phase that delivers it. No dead links, no invented screens.
+     * Items are declared up front so the information architecture is settled.
+     * A delivered item is simply a link — it carries no phase marking, because
+     * build-order is scaffolding the operator has no use for. Only items that do
+     * not exist yet are disabled, and those say when they arrive so the menu is
+     * never a dead end. No dead links, no invented screens.
      */
     $sections = [
         'Overview' => [
@@ -22,6 +24,7 @@
         ],
         'Rewards' => [
             ['label' => 'Calculations', 'icon' => 'bi-calculator', 'route' => 'admin.calculations.index', 'active' => 'admin.calculations.*', 'phase' => 12],
+            ['label' => 'Direct Sale', 'icon' => 'bi-cash-coin', 'route' => 'admin.rewards.direct-sales', 'active' => 'admin.rewards.direct-sales', 'phase' => 5],
             [
                 'label' => 'One Month Target',
                 'icon' => 'bi-bullseye',
