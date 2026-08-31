@@ -10,7 +10,7 @@ use App\Models\RegistrySale;
 use App\Models\RewardLedger;
 use App\Models\TargetCalculation;
 use App\Support\Money;
-use Illuminate\Support\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
@@ -110,7 +110,16 @@ class DashboardMetricsService
         $period = now()->format('Y-m');
         $rewards = [];
 
-        foreach ([RewardType::Direct, RewardType::Upline, RewardType::Target] as $type) {
+        // Company Club has its own overview and is deliberately not a
+        // dashboard engine card. A hidden engine is skipped entirely: its money
+        // is still being calculated, but the dashboard must not report a figure
+        // for a reward the operator has no screen for.
+        $engines = array_filter(
+            [RewardType::Direct, RewardType::Upline, RewardType::Target],
+            fn (RewardType $type) => $type->isVisible(),
+        );
+
+        foreach ($engines as $type) {
             $totals = RewardLedger::query()
                 ->ofType($type)
                 ->selectRaw('COUNT(*) as entries')
@@ -223,7 +232,7 @@ class DashboardMetricsService
     }
 
     /**
-     * @param  callable(\Illuminate\Database\Eloquent\Builder<RegistrySale>): mixed  $scope
+     * @param  callable(Builder<RegistrySale>): mixed  $scope
      * @return array{count: int, sqft: string}
      */
     private function salesAggregate(callable $scope): array

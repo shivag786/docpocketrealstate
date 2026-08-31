@@ -113,6 +113,42 @@ class RegistrySaleEntryTest extends TestCase
     }
 
     #[Test]
+    public function the_entry_form_offers_a_date_picker_defaulting_to_today(): void
+    {
+        // The field existed but was buried inside the collapsed "additional
+        // detail" accordion and started empty, so recording a past sale looked
+        // impossible. It is now part of the main form with today prefilled.
+        $response = $this->actingAs($this->admin)
+            ->get(route('admin.sales.create'))
+            ->assertOk();
+
+        $html = $response->getContent();
+
+        $this->assertStringContainsString('type="date"', $html);
+        $this->assertStringContainsString('name="registry_date"', $html);
+        $this->assertStringContainsString('value="'.now()->format('Y-m-d').'"', $html);
+        // Future dates are refused by the form as well as by validation.
+        $this->assertStringContainsString('max="'.now()->format('Y-m-d').'"', $html);
+        $this->assertStringContainsString('Pick an earlier date to record a past sale', $html);
+    }
+
+    #[Test]
+    public function a_back_dated_sale_is_rewarded_in_the_month_it_is_dated(): void
+    {
+        $this->actingAs($this->admin)
+            ->post(route('admin.sales.store'), $this->payload([
+                'registry_date' => now()->subMonths(2)->startOfMonth()->addDays(3)->format('Y-m-d'),
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $period = now()->subMonths(2)->format('Y-m');
+
+        $this->assertSame($period, RegistrySale::first()->registry_date->format('Y-m'));
+        // The month it was dated into is the month that was rebuilt, not today's.
+        $this->assertDatabaseHas('reward_ledger', ['period' => $period]);
+    }
+
+    #[Test]
     public function the_registry_date_decides_the_reward_period(): void
     {
         $this->actingAs($this->admin)

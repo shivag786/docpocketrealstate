@@ -69,7 +69,7 @@
                         <label for="q" class="form-label small mb-1">Search</label>
                         <input type="search" id="q" name="q" value="{{ $filters['q'] }}"
                                class="form-control form-control-sm"
-                               placeholder="Registry no., member, mobile, property">
+                               placeholder="Registry no., member, mobile, block or plot">
                     </div>
 
                     <div class="col-12 col-lg-3">
@@ -219,7 +219,7 @@
                             </th>
                         @endforeach
 
-                        <th class="d-none d-lg-table-cell">Project / Site</th>
+                        <th class="d-none d-lg-table-cell">Project / Plot</th>
 
                         @php $sqftState = $sortLink('sqft'); @endphp
                         <th class="text-end {{ $sqftState['active'] ? 'is-sorted' : '' }}">
@@ -257,7 +257,9 @@
                             <td class="d-none d-lg-table-cell small">
                                 @if ($sale->project)
                                     {{ $sale->project->name }}
-                                    <div class="text-muted">{{ $sale->property?->property_code ?? '—' }}</div>
+                                    <div class="text-muted">
+                                        {{ $sale->location() ?? $sale->property?->property_code ?? '—' }}
+                                    </div>
                                 @else
                                     <span class="text-body-tertiary">&mdash;</span>
                                 @endif

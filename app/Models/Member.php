@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\BloodGroup;
 use App\Enums\MemberStatus;
 use Database\Factories\MemberFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,7 +20,10 @@ use Illuminate\Support\Collection;
  * Members are records, not users — they never authenticate. All data entry is
  * performed by Admin/Manager staff (docs/02_BUSINESS_RULES.md §7).
  */
-#[Fillable(['name', 'mobile', 'email', 'address', 'sponsor_id', 'joining_date', 'status'])]
+#[Fillable([
+    'name', 'mobile', 'email', 'blood_group', 'designation',
+    'address', 'sponsor_id', 'joining_date', 'status',
+])]
 class Member extends Model
 {
     /** @use HasFactory<MemberFactory> */
@@ -33,6 +37,7 @@ class Member extends Model
         return [
             'joining_date' => 'date',
             'status' => MemberStatus::class,
+            'blood_group' => BloodGroup::class,
         ];
     }
 

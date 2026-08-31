@@ -1,10 +1,22 @@
 @extends('layouts.admin')
 
+@php
+    /**
+     * A member with no sponsor sits directly under the Company Club, which is a
+     * system entity with no member row. "Root" was the old wording for exactly
+     * the same thing and is no longer used in the UI. The name is read from the
+     * Company Club settings, so renaming the club renames it here too.
+     *
+     * Resolved ONCE per page rather than per row.
+     */
+    $clubName = \App\Models\CompanyClubSetting::current()->name();
+@endphp
+
 @section('title', 'Upline Explorer — ' . $member->member_code)
 @section('page-title', 'Upline Explorer')
 
 @section('breadcrumbs')
-    <li class="breadcrumb-item"><a href="{{ route('admin.calculations.upline.ledger') }}">Upline Rewards</a></li>
+    <li class="breadcrumb-item"><a href="{{ route('admin.rewards.upline') }}">Upline Rewards</a></li>
     <li class="breadcrumb-item active" aria-current="page">{{ $member->member_code }}</li>
 @endsection
 
@@ -32,7 +44,7 @@
                     <div class="col-12 col-md-5 text-md-end">
                         <span class="small text-muted me-2">Calculated periods:</span>
                         @foreach ($periods as $available)
-                            <a href="{{ route('admin.calculations.upline.explain', [$member, 'period' => $available]) }}"
+                            <a href="{{ route('admin.rewards.upline.explain', [$member, 'period' => $available]) }}"
                                class="badge text-decoration-none {{ $available === $period ? 'text-bg-primary' : 'text-bg-light border' }}">
                                 {{ $available }}
                             </a>
@@ -74,12 +86,12 @@
     </div>
 
     {{-- ============================================================
-         2. Root → member path, exactly as requested.
+         2. Company Club → member path, exactly as requested.
     ============================================================= --}}
     <div class="card mb-3">
         <div class="card-header bg-white">
             <strong>Position in the network</strong>
-            <span class="small text-muted">— from the root down to {{ $member->member_code }}</span>
+            <span class="small text-muted">— from {{ $clubName }} down to {{ $member->member_code }}</span>
         </div>
         <div class="card-body">
             <ol class="hierarchy">
@@ -88,14 +100,14 @@
                         <span class="hierarchy-rail"></span>
                         <span class="hierarchy-node {{ $ancestor->isActive() ? '' : 'is-inactive' }}">
                             <span class="hierarchy-level">L{{ $loop->index }}</span>
-                            <a href="{{ route('admin.calculations.upline.explain', [$ancestor, 'period' => $period]) }}"
+                            <a href="{{ route('admin.rewards.upline.explain', [$ancestor, 'period' => $period]) }}"
                                class="fw-semibold text-decoration-none">{{ $ancestor->member_code }}</a>
                             <span class="ms-2">{{ $ancestor->name }}</span>
                             @unless ($ancestor->isActive())
                                 <span class="badge text-bg-secondary ms-2">Inactive</span>
                             @endunless
                             @if ($loop->first)
-                                <span class="badge text-bg-light border ms-2">Root</span>
+                                <span class="badge text-bg-primary ms-2">{{ $clubName }}</span>
                             @endif
                         </span>
                     </li>
@@ -115,7 +127,7 @@
             @if ($path->isEmpty())
                 <p class="text-muted small mb-0">
                     <i class="bi bi-info-circle me-1"></i>
-                    This is a root member — nobody sits above them, so their own sales
+                    This member sits directly under {{ $clubName }} — nobody sits above them, so their own sales
                     produce no upline reward for anyone.
                 </p>
             @endif
@@ -170,7 +182,7 @@
                                 <tr class="{{ $link['eligible'] ? '' : 'table-light text-muted' }}">
                                     <td><span class="badge text-bg-light border">+{{ $link['depth'] }}</span></td>
                                     <td>
-                                        <a href="{{ route('admin.calculations.upline.explain', [$link['member'], 'period' => $period]) }}"
+                                        <a href="{{ route('admin.rewards.upline.explain', [$link['member'], 'period' => $period]) }}"
                                            class="fw-semibold text-decoration-none">
                                             {{ $link['member']->member_code }}
                                         </a>
@@ -246,7 +258,7 @@
                     @forelse ($receipts as $receipt)
                         <tr>
                             <td>
-                                <a href="{{ route('admin.calculations.upline.explain', [$receipt->seller_id, 'period' => $period]) }}"
+                                <a href="{{ route('admin.rewards.upline.explain', [$receipt->seller_id, 'period' => $period]) }}"
                                    class="fw-semibold text-decoration-none">
                                     {{ $receipt->seller->member_code }}
                                 </a>

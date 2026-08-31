@@ -1,4 +1,5 @@
 import * as bootstrap from 'bootstrap';
+import Swal from 'sweetalert2';
 
 window.bootstrap = bootstrap;
 
@@ -6,6 +7,7 @@ window.bootstrap = bootstrap;
 import './sponsor-picker.js';
 import './member-tree.js';
 import './sale-entry.js';
+import './company-club.js';
 
 /**
  * ---------------------------------------------------------------------------
@@ -145,7 +147,102 @@ function notify(message, variant = 'success') {
     instance.show();
 }
 
-window.App = { request, RequestError, setLoading, showFormErrors, clearFormErrors, notify };
+/**
+ * ---------------------------------------------------------------------------
+ * Confirmation dialog
+ * ---------------------------------------------------------------------------
+ * One dialog for every irreversible action in the back office: marking a reward
+ * paid, entering a sale, rebuilding a month.
+ *
+ * The browser's own confirm() cannot show WHO is about to be paid or HOW MUCH,
+ * and a confirmation that only says "are you sure?" is one an operator learns to
+ * click through. `details` renders a labelled list inside the dialog, so the
+ * facts that matter are in front of them at the moment they commit.
+ *
+ * @param {{title?: string, text?: string, details?: [string, string][],
+ *          confirmText?: string, cancelText?: string, variant?: string,
+ *          icon?: string}} options
+ * @returns {Promise<boolean>} whether the operator confirmed
+ */
+async function confirmAction({
+    title = 'Are you sure?',
+    text = '',
+    details = [],
+    confirmText = 'Yes, continue',
+    cancelText = 'Cancel',
+    variant = 'primary',
+    icon = 'warning',
+} = {}) {
+    const escape = (value) => String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    const list = details.length === 0 ? '' : `
+        <dl class="row text-start small mb-0 mt-3 border-top pt-3">
+            ${details.map(([label, value]) => `
+                <dt class="col-5 text-muted fw-normal">${escape(label)}</dt>
+                <dd class="col-7 mb-1 fw-semibold">${escape(value)}</dd>
+            `).join('')}
+        </dl>`;
+
+    const result = await Swal.fire({
+        title,
+        icon,
+        html: `${text ? `<p class="mb-0 small text-muted">${escape(text)}</p>` : ''}${list}`,
+        showCancelButton: true,
+        confirmButtonText: confirmText,
+        cancelButtonText: cancelText,
+        reverseButtons: true,
+        focusCancel: true,
+        buttonsStyling: false,
+        customClass: {
+            popup: 'shadow',
+            title: 'h5',
+            confirmButton: `btn btn-${variant} px-4`,
+            cancelButton: 'btn btn-outline-secondary px-4 me-2',
+        },
+    });
+
+    return result.isConfirmed === true;
+}
+
+/**
+ * Read a confirmation off an element's data attributes.
+ *
+ * `data-confirm-details` is a JSON array of [label, value] pairs — the person,
+ * the amount, the month. Anything malformed is dropped rather than blocking the
+ * dialog: a broken detail list must never stop an operator working.
+ */
+function confirmOptionsFrom(el) {
+    let details = [];
+
+    try {
+        details = JSON.parse(el.dataset.confirmDetails || '[]');
+    } catch {
+        details = [];
+    }
+
+    return {
+        title: el.dataset.confirmTitle || 'Are you sure?',
+        text: el.dataset.confirmSubmit || el.dataset.confirm || '',
+        details: Array.isArray(details) ? details : [],
+        confirmText: el.dataset.confirmButton || 'Yes, continue',
+        variant: el.dataset.confirmVariant || 'primary',
+        icon: el.dataset.confirmIcon || 'warning',
+    };
+}
+
+window.App = {
+    request,
+    RequestError,
+    setLoading,
+    showFormErrors,
+    clearFormErrors,
+    notify,
+    confirm: confirmAction,
+    confirmOptionsFrom,
+};
 
 /**
  * ---------------------------------------------------------------------------
@@ -180,12 +277,73 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Confirm destructive actions before they fire.
-    document.querySelectorAll('[data-confirm]').forEach((el) => {
-        el.addEventListener('submit', (event) => {
-            if (!window.confirm(el.dataset.confirm)) {
-                event.preventDefault();
+    //
+    // The dialog is asynchronous, so the submit is ALWAYS stopped first and
+    // replayed only once the operator has confirmed. `confirmed` marks the
+    // replay so the handler does not ask a second time.
+    document.querySelectorAll('[data-confirm]').forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+            if (form.dataset.confirmed === 'yes') {
+                return;
+            }
+
+            event.preventDefault();
+
+            if (await window.App.confirm(window.App.confirmOptionsFrom(form))) {
+                form.dataset.confirmed = 'yes';
+                form.submit();
             }
         });
+    });
+
+    // Show/hide a password field.
+    //
+    // One handler for every [data-password-toggle] button in the application —
+    // the sign-in form and the change-password form both use it. The value of
+    // the attribute is the id of the field it reveals, so a form with three
+    // password fields gets three independent toggles.
+    document.querySelectorAll('[data-password-toggle]').forEach((button) => {
+        const field = document.getElementById(button.dataset.passwordToggle);
+        const icon = button.querySelector('i');
+        if (!field) return;
+
+        button.addEventListener('click', () => {
+            const revealed = field.type === 'text';
+
+            field.type = revealed ? 'password' : 'text';
+            icon?.classList.toggle('bi-eye', revealed);
+            icon?.classList.toggle('bi-eye-slash', !revealed);
+
+            const label = revealed ? 'Show password' : 'Hide password';
+            button.setAttribute('aria-label', label);
+            button.title = label;
+
+            // Typing should carry on where it left off, not at position zero.
+            field.focus();
+            field.setSelectionRange?.(field.value.length, field.value.length);
+        });
+    });
+
+    // Typed-phrase gate in front of an irreversible action.
+    //
+    // The button stays disabled until the operator has typed the exact word.
+    // This is a courtesy, NOT the guard: the server checks the same phrase
+    // (see ResetSystemRequest), because a disabled attribute is one devtools
+    // click away from gone.
+    document.querySelectorAll('[data-confirm-phrase]').forEach((input) => {
+        const button = document.getElementById(input.dataset.confirmTarget);
+        if (!button) return;
+
+        const phrase = input.dataset.confirmPhrase;
+
+        const sync = () => {
+            const matches = input.value.trim() === phrase;
+            button.disabled = !matches;
+            input.classList.toggle('is-valid', matches && input.value !== '');
+        };
+
+        input.addEventListener('input', sync);
+        sync();
     });
 
     // Auto-dismiss server-rendered flash messages.

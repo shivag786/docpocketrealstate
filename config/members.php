@@ -8,7 +8,11 @@ return [
     |--------------------------------------------------------------------------
     |
     | Client-confirmed: an admin-settable prefix followed by a plain sequential
-    | number, e.g. RS1, RS2, RS3.
+    | number.
+    |
+    | Client-confirmed 2026-08-19: the prefix is DPRS and numbering starts at
+    | 101, so the first member is DPRS101, then DPRS102, and so on. This
+    | replaced the earlier RS1, RS2, RS3.
     |
     | The sequence is stored separately from the formatted code (see the
     | `sequence_number` column). Changing the prefix therefore continues the
@@ -26,9 +30,9 @@ return [
     */
 
     'code' => [
-        'prefix' => env('MEMBER_CODE_PREFIX', 'RS'),
+        'prefix' => env('MEMBER_CODE_PREFIX', 'DPRS'),
         'pad' => (int) env('MEMBER_CODE_PAD', 0),
-        'start_at' => (int) env('MEMBER_CODE_START_AT', 1),
+        'start_at' => (int) env('MEMBER_CODE_START_AT', 101),
     ],
 
     /*

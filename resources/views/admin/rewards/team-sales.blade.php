@@ -4,7 +4,7 @@
 @section('page-title', 'Team Sales — ' . $period)
 
 @section('breadcrumbs')
-    <li class="breadcrumb-item"><a href="{{ route('admin.calculations.index') }}">Calculations</a></li>
+    <li class="breadcrumb-item">Rewards</li>
     <li class="breadcrumb-item active" aria-current="page">Team Sales</li>
 @endsection
 
@@ -85,7 +85,7 @@
                     @forelse ($rows as $row)
                         <tr>
                             <td>
-                                <a href="{{ route('admin.calculations.team.contributors', [$row->leader_id, 'period' => $period]) }}"
+                                <a href="{{ route('admin.rewards.team-sales.contributors', [$row->leader_id, 'period' => $period]) }}"
                                    class="fw-semibold text-decoration-none">
                                     {{ $row->leader->member_code }}
                                 </a>
@@ -116,7 +116,7 @@
                                 <i class="bi bi-people fs-2 d-block mb-2 opacity-50"></i>
                                 No team sales calculated for {{ $period }}.
                                 <a href="{{ route('admin.calculations.index', ['period' => $period]) }}">
-                                    Run the calculation
+                                    Check the calculation state for this month
                                 </a>.
                             </td>
                         </tr>

@@ -2,7 +2,7 @@
  * Daily sale entry helpers.
  *
  *  - member lookup over AJAX (the network can be large; never a <select>)
- *  - property dropdown that depends on the chosen project
+ *  - block-name suggestions drawn from what the chosen project already has
  *  - explicit confirmation before saving, because a sale is approved on entry
  *    and can never be edited or deleted afterwards
  */
@@ -35,7 +35,7 @@ function initMemberPicker(root) {
         selected.classList.remove('d-none');
         searchInput.value = '';
         hide();
-        document.getElementById('project_id')?.focus();
+        document.getElementById('sqft')?.focus();
     };
 
     clearBtn?.addEventListener('click', () => {
@@ -115,64 +115,115 @@ function initMemberPicker(root) {
     });
 }
 
-function initProjectPropertyLink(projectSelect) {
-    const propertySelect = document.querySelector('[data-property-select]');
-    if (!propertySelect) return;
+/**
+ * Block-name suggestions for the chosen project.
+ *
+ * A plain text input with a suggestion list, NOT a <select>: a project's first
+ * sale in a newly laid-out block has to be typeable, so the list may only ever
+ * offer, never restrict. The server takes the same view — see
+ * BlockSearchController.
+ *
+ * Suggestions are scoped to the selected project, because a block name only
+ * means something inside one. With no project chosen the field still accepts
+ * typing; it simply has nothing to suggest.
+ */
+function initBlockPicker(root) {
+    const input = root.querySelector('[data-block-input]');
+    const results = root.querySelector('[data-block-results]');
+    const hint = document.querySelector('[data-block-hint]');
+    const projectSelect = document.querySelector('[data-project-select]');
 
-    const url = projectSelect.dataset.propertiesUrl;
-    const preselected = propertySelect.dataset.selected;
+    if (!input || !results) return;
 
-    const setPlaceholder = (text) => {
-        propertySelect.innerHTML = '';
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = text;
-        propertySelect.appendChild(option);
+    const searchUrl = root.dataset.searchUrl;
+    let debounce = null;
+    let inFlight = null;
+
+    const hide = () => {
+        results.classList.add('d-none');
+        results.innerHTML = '';
     };
 
-    const load = async (projectId, keepSelection = null) => {
-        // Project and property are optional, so "none" is always a valid choice.
-        if (!projectId) {
-            setPlaceholder('— None —');
+    const render = (blocks) => {
+        results.innerHTML = '';
+
+        if (!blocks || blocks.length === 0) {
+            hide();
             return;
         }
 
-        window.App.setLoading(propertySelect.parentElement, true);
-        setPlaceholder('Loading…');
-
-        try {
-            const { data } = await window.App.request(`${url}?project_id=${encodeURIComponent(projectId)}`);
-
-            if (!data || data.length === 0) {
-                setPlaceholder('No active properties in this project');
-                return;
-            }
-
-            setPlaceholder('— None —');
-
-            data.forEach((property) => {
-                const option = document.createElement('option');
-                option.value = property.id;
-                option.textContent = property.details
-                    ? `${property.property_code} — ${property.details}`
-                    : property.property_code;
-                if (keepSelection && String(keepSelection) === String(property.id)) {
-                    option.selected = true;
-                }
-                propertySelect.appendChild(option);
+        blocks.forEach((block) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'list-group-item list-group-item-action py-1 small';
+            item.textContent = block;
+            item.addEventListener('click', () => {
+                input.value = block;
+                hide();
+                document.getElementById('plot_number')?.focus();
             });
-        } catch (error) {
-            window.App.notify(error.message, 'danger');
-            setPlaceholder('Could not load properties');
-        } finally {
-            window.App.setLoading(propertySelect.parentElement, false);
-        }
+            results.appendChild(item);
+        });
+
+        results.classList.remove('d-none');
     };
 
-    projectSelect.addEventListener('change', (event) => load(event.target.value));
+    const search = () => {
+        const projectId = projectSelect?.value;
 
-    // Repopulate after a validation failure returns the user to the form.
-    if (projectSelect.value) load(projectSelect.value, preselected);
+        if (!projectId) {
+            hide();
+            return;
+        }
+
+        clearTimeout(debounce);
+
+        debounce = setTimeout(async () => {
+            inFlight?.abort();
+            inFlight = new AbortController();
+
+            try {
+                const { data } = await window.App.request(
+                    `${searchUrl}?project_id=${encodeURIComponent(projectId)}`
+                        + `&q=${encodeURIComponent(input.value.trim())}`,
+                    { signal: inFlight.signal }
+                );
+                render(data);
+            } catch (error) {
+                // A failed suggestion lookup must never interrupt sale entry:
+                // the field is free text and stays perfectly usable without it.
+                if (error.name !== 'AbortError') hide();
+            }
+        }, DEBOUNCE_MS);
+    };
+
+    // Opening the list on focus is what makes this discoverable — an operator
+    // who does not know a project's blocks has nothing to type to find out.
+    input.addEventListener('focus', search);
+    input.addEventListener('input', search);
+
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') hide();
+    });
+
+    projectSelect?.addEventListener('change', () => {
+        hide();
+
+        if (hint) {
+            hint.textContent = projectSelect.value
+                ? 'Start typing, or click the field to see blocks already recorded here.'
+                : 'Pick a project to see the blocks already recorded in it.';
+        }
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!root.contains(event.target)) hide();
+    });
+
+    // Reflect a project that survived a validation round-trip.
+    if (projectSelect?.value && hint) {
+        hint.textContent = 'Start typing, or click the field to see blocks already recorded here.';
+    }
 }
 
 /**
@@ -279,7 +330,7 @@ function initDirectAmountPreview(input) {
 
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-member-picker]').forEach(initMemberPicker);
-    document.querySelectorAll('[data-project-select]').forEach(initProjectPropertyLink);
+    document.querySelectorAll('[data-block-picker]').forEach(initBlockPicker);
     document.querySelectorAll('[data-numeric]').forEach(initNumericInput);
     document.querySelectorAll('[data-sqft-input]').forEach(initDirectAmountPreview);
 
@@ -296,11 +347,32 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // A sale is irreversible once saved — make the operator acknowledge it.
+    // A sale is irreversible once saved, and so is confirming a payment — make
+    // the operator acknowledge it.
+    //
+    // This one handler covers every [data-confirm-submit] button in the back
+    // office: sale entry, Mark Paid on the target and Company Club screens, and
+    // the recalculation controls. The dialog is asynchronous, so the click is
+    // always cancelled first and the form submitted afterwards if confirmed.
     document.querySelectorAll('[data-confirm-submit]').forEach((button) => {
-        button.addEventListener('click', (event) => {
-            if (!window.confirm(button.dataset.confirmSubmit)) {
-                event.preventDefault();
+        button.addEventListener('click', async (event) => {
+            if (button.dataset.confirmed === 'yes') {
+                return;
+            }
+
+            event.preventDefault();
+
+            if (await window.App.confirm(window.App.confirmOptionsFrom(button))) {
+                button.dataset.confirmed = 'yes';
+
+                // requestSubmit keeps the button's own name/value in the payload
+                // and still runs native validation, which button.form.submit()
+                // would skip.
+                if (button.form?.requestSubmit) {
+                    button.form.requestSubmit(button);
+                } else {
+                    button.form?.submit();
+                }
             }
         });
     });

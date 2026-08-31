@@ -659,6 +659,76 @@ input[data-numeric] {
   border-color: rgba(27, 77, 143, 0.25);
 }
 
+// --- Calculation cards and figure tiles ---------------------------------
+// The small boxes that spell out a formula: sales, pool, divisor, share. Each
+// step carries its own colour, because four identical grey boxes make four
+// different quantities read as one list — the reading an operator must not
+// make when the numbers are money.
+//
+// Muted on purpose. These sit four-across above a data table and are labels,
+// not alerts; saturated fills would out-shout the figures inside them.
+$figure-tones: (
+  "primary": $primary,
+  "success": $success,
+  "info": $info,
+  "warning": $warning,
+  "secondary": $secondary,
+  "teal": #0f766e,
+  "purple": #6b46a8,
+  "indigo": #3f51a8,
+  "pink": #a8447a,
+);
+
+.figure-tile {
+  border: 1px solid $gray-300;
+  border-left: 3px solid $gray-400;
+  border-radius: $border-radius;
+  padding: 0.85rem 1rem;
+  background: #fff;
+
+  .figure-label {
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: $gray-700;
+  }
+
+  .figure-value {
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.35;
+    margin: 0.1rem 0 0.15rem;
+    overflow-wrap: anywhere;
+  }
+
+  .figure-note {
+    font-size: 0.78rem;
+    color: $gray-600;
+  }
+
+  @each $name, $color in $figure-tones {
+    &.tone-#{$name} {
+      border-left-color: $color;
+      background: tint-color($color, 94%);
+      border-color: tint-color($color, 70%);
+
+      .figure-label { color: shade-color($color, 15%); }
+      .figure-value { color: shade-color($color, 30%); }
+    }
+  }
+}
+
+// A calculation card wears the colour of the calculation it explains, so two
+// pools on one page are told apart before either is read.
+.calc-card {
+  border-top: 3px solid $gray-300;
+
+  @each $name, $color in $figure-tones {
+    &.tone-#{$name} {
+      border-top-color: $color;
+    }
+  }
+}
+
 // --- Reward engine cards ------------------------------------------------
 .engine-card {
   border-radius: $border-radius * 1.5;
@@ -1006,5 +1076,376 @@ input[data-numeric] {
   .target-tree .tree-children {
     margin-left: 0.4rem;
     padding-left: 0.55rem;
+  }
+}
+
+// --- Company Club calculation tree --------------------------------------
+// The monthly calculation drawn top-to-bottom: club, sales, rate, pool,
+// recipient count, equal share, then the recipients themselves. Every node
+// carries a real figure, so the diagram is the arithmetic rather than an
+// illustration of it.
+.cc-tree {
+  --cc-line: #{$gray-400};
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.25rem .5rem;
+
+  .cc-tree-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+
+  .cc-connector {
+    width: 2px;
+    height: 1.15rem;
+    background: var(--cc-line);
+  }
+
+  .cc-connector-tall {
+    height: 1.75rem;
+  }
+
+  .cc-node {
+    min-width: 13rem;
+    max-width: 100%;
+    text-align: center;
+    padding: .6rem 1.1rem;
+    border: 1px solid $gray-300;
+    border-radius: .5rem;
+    background: #fff;
+  }
+
+  .cc-node-label {
+    font-size: .75rem;
+    color: $gray-600;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+  }
+
+  .cc-node-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .cc-node-sub {
+    font-size: .75rem;
+    color: $gray-600;
+  }
+
+  .cc-node-club {
+    background: $primary;
+    border-color: $primary;
+    color: #fff;
+    font-weight: 600;
+    letter-spacing: .04em;
+
+    .cc-node-sub { color: rgba(255, 255, 255, .8); }
+  }
+
+  .cc-node-operator {
+    min-width: auto;
+    padding: .3rem .9rem;
+    font-weight: 600;
+    background: $gray-100;
+  }
+
+  .cc-node-pool .cc-node-value,
+  .cc-node-share .cc-node-value {
+    color: $primary;
+  }
+
+  .cc-node-share {
+    border-color: $primary;
+    border-width: 2px;
+  }
+
+  // The recipients fan out beneath the share, joined by one horizontal rule so
+  // the branching reads as a single distribution rather than a list.
+  .cc-recipients {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: .75rem;
+    padding-top: 1.25rem;
+    width: 100%;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 12%;
+      right: 12%;
+      height: 2px;
+      background: var(--cc-line);
+    }
+  }
+
+  .cc-recipient {
+    position: relative;
+    display: block;
+    min-width: 10.5rem;
+    padding: .55rem .75rem;
+    border: 1px solid $gray-300;
+    border-radius: .5rem;
+    background: #fff;
+    text-align: center;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color .15s ease, box-shadow .15s ease;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: -1.25rem;
+      left: 50%;
+      width: 2px;
+      height: 1.25rem;
+      background: var(--cc-line);
+    }
+
+    &:hover {
+      border-color: $primary;
+      box-shadow: 0 .25rem .6rem rgba(0, 0, 0, .08);
+    }
+  }
+
+  .cc-recipient-code {
+    font-size: .7rem;
+    color: $gray-600;
+  }
+
+  .cc-recipient-name {
+    font-size: .85rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cc-recipient-amount {
+    font-weight: 600;
+    color: $primary;
+  }
+
+  .cc-recipient-meta {
+    font-size: .7rem;
+    color: $gray-600;
+  }
+
+  .cc-recipient-inactive {
+    background: $gray-100;
+    opacity: .85;
+  }
+}
+
+// --- Company Club network tree ------------------------------------------
+// The Club is drawn as a fixed root because it is a system entity with no
+// member row. Its children are the members with no sponsor.
+.cc-network-root {
+  display: inline-block;
+  padding: .5rem 1.1rem;
+  border-radius: .5rem;
+  background: $primary;
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: .03em;
+}
+
+.cc-level-badge {
+  font-size: .7rem;
+}
+
+// --- Company Club income distribution -----------------------------------
+// Two trees on one page: each seller with the sponsors their sale paid, and
+// the whole network from the Club down. Deliberately carries NO level
+// numbering — the nesting says who is above whom, and the figures are the
+// point of the screen.
+.cc-inc-tree {
+  overflow-x: auto;
+}
+
+.cc-inc-root {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: .75rem;
+}
+
+.cc-inc-root-figures {
+  font-size: .8rem;
+  color: $gray-600;
+}
+
+.cc-inc-children {
+  margin-left: 1.1rem;
+  padding-left: 1rem;
+  border-left: 1px dashed $gray-400;
+}
+
+.cc-inc-children-root {
+  border-left-color: $primary;
+}
+
+.cc-inc-node {
+  margin-top: .4rem;
+}
+
+.cc-inc-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  padding: .4rem .6rem;
+  border: 1px solid $gray-300;
+  border-radius: .4rem;
+  background: #fff;
+}
+
+// A member who was paid this month is the thing the page is about, so it is
+// the one row that carries an accent.
+.cc-inc-paid {
+  border-color: rgba($primary, .55);
+  background: rgba($primary, .04);
+}
+
+.cc-inc-inactive {
+  background: $gray-100;
+
+  .cc-inc-name { color: $gray-600; }
+}
+
+.cc-inc-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid $gray-400;
+  border-radius: .25rem;
+  background: #fff;
+  line-height: 1;
+}
+
+.cc-inc-toggle-static {
+  border-color: transparent;
+  background: transparent;
+}
+
+.cc-inc-code {
+  font-size: .72rem;
+  padding: .1rem .35rem;
+  border: 1px solid $gray-300;
+  border-radius: .25rem;
+  color: $gray-700;
+  white-space: nowrap;
+}
+
+.cc-inc-name {
+  font-weight: 600;
+  font-size: .85rem;
+}
+
+.cc-inc-figures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .4rem;
+  margin-left: auto;
+  font-size: .78rem;
+}
+
+.cc-inc-sale {
+  padding: .1rem .4rem;
+  border-radius: .25rem;
+  background: rgba($success, .12);
+  color: darken($success, 8%);
+  white-space: nowrap;
+}
+
+.cc-inc-branch {
+  padding: .1rem .4rem;
+  border-radius: .25rem;
+  background: $gray-100;
+  color: $gray-700;
+  white-space: nowrap;
+}
+
+.cc-inc-reward {
+  padding: .1rem .45rem;
+  border-radius: .25rem;
+  background: $primary;
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover { color: #fff; background: darken($primary, 7%); }
+}
+
+// --- Seller -> sponsors chain -------------------------------------------
+.cc-chain {
+  padding: .6rem .75rem;
+  border: 1px solid $gray-300;
+  border-radius: .5rem;
+  margin-bottom: .6rem;
+  background: #fff;
+}
+
+.cc-chain-excluded {
+  background: $gray-100;
+  opacity: .9;
+}
+
+.cc-chain-seller {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+}
+
+.cc-chain-sqft {
+  font-weight: 600;
+  color: darken($success, 8%);
+}
+
+.cc-chain-links {
+  margin-top: .35rem;
+  margin-left: .6rem;
+  padding-left: .9rem;
+  border-left: 1px dashed $gray-400;
+}
+
+.cc-chain-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .4rem;
+  padding: .2rem 0;
+  font-size: .85rem;
+}
+
+.cc-chain-arrow {
+  color: $gray-500;
+}
+
+.cc-chain-skipped {
+  color: $gray-600;
+
+  .cc-inc-name { text-decoration: line-through; }
+}
+
+@include media-breakpoint-down(md) {
+  .cc-inc-figures {
+    margin-left: 0;
+    width: 100%;
   }
 }

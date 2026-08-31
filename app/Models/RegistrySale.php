@@ -19,12 +19,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *   - a sale is never editable or removable after entry
  *
  * This record is the source of every reward in the system. Direct (₹40), Upline
- * (₹50), Team Target (₹30) and Company Club (₹30) all read from `sqft` here, but
+ * (₹50), Team Target (₹30) and Company Club (₹50) all read from `sqft` here, but
  * they remain four independent engines and must never be derived from each other.
+ *
+ * Company Club is the one engine that also consults the SELLER's status: an
+ * inactive member's sales are excluded from its pool entirely, while Direct,
+ * Upline and Target count them regardless.
  */
 #[Fillable([
-    'member_id', 'project_id', 'property_id', 'registry_reference',
-    'registry_date', 'sale_date', 'sqft', 'notes',
+    'member_id', 'project_id', 'property_id', 'block_name', 'plot_number',
+    'registry_reference', 'registry_date', 'sale_date', 'sqft', 'notes',
 ])]
 class RegistrySale extends Model
 {
@@ -133,6 +137,8 @@ class RegistrySale extends Model
 
         $query->where(function (Builder $q) use ($term) {
             $q->where('registry_reference', 'like', "%{$term}%")
+                ->orWhere('block_name', 'like', "%{$term}%")
+                ->orWhere('plot_number', 'like', "%{$term}%")
                 ->orWhereHas('member', function (Builder $m) use ($term) {
                     $m->where('member_code', 'like', "%{$term}%")
                         ->orWhere('name', 'like', "%{$term}%")
@@ -140,6 +146,25 @@ class RegistrySale extends Model
                 })
                 ->orWhereHas('property', fn (Builder $p) => $p->where('property_code', 'like', "%{$term}%"));
         });
+    }
+
+    /**
+     * Where the plot is, as one printable line.
+     *
+     * Block and plot number were added on 2026-08-31; every sale recorded
+     * before that has neither, and many recorded after will have only one of
+     * them, because both are optional. So this returns null rather than a
+     * string of stray separators, and callers render the row without a
+     * location instead of rendering an empty one.
+     */
+    public function location(): ?string
+    {
+        $parts = array_values(array_filter([
+            $this->block_name,
+            $this->plot_number ? "Plot {$this->plot_number}" : null,
+        ]));
+
+        return $parts === [] ? null : implode(', ', $parts);
     }
 
     /**

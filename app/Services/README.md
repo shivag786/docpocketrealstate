@@ -20,12 +20,14 @@ each service arrives with the phase that needs it.
 | `UplineRewardService` | 6 | Monthly seller pool × ₹50, split across eligible uplines |
 | `TeamSalesService` | 7 | Own + all connected downline approved sales |
 | `TargetService` | 8–10 | Target 1/2/3 cycles, cumulative progress, achievement |
-| `CompanyClubService` | 11 | Total approved company Sq.Ft. × ₹30 |
+| `CompanyClubService` | 11 | Eligible (ACTIVE seller) Sq.Ft. × ₹50, one pool, shared equally |
 | `CalculationRunService` | 12 | Run lifecycle, duplicate protection, transactions |
 | `RewardLedgerService` | 13 | Ledger writes and reconciliation |
+| `CompanySettingsService` | 16 | Company identity, logo/signature uploads, designation list |
+| `SystemResetService` | 16 | Clears every business table so the system can be handed over empty |
 
 ## Non-negotiable
 
 The four calculations are **independent**. Direct (₹40), Upline (₹50),
-Target (₹30) and Company Club (₹30) must not share state or be derived from one
+Target (₹30) and Company Club (₹50) must not share state or be derived from one
 another. Target achievement never affects Direct or Upline rewards.

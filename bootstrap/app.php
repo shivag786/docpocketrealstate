@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureDeveloperToolsEnabled;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Support\ApiResponse;
@@ -22,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
+            'developer' => EnsureDeveloperToolsEnabled::class,
             'role' => EnsureUserHasRole::class,
             'active' => EnsureUserIsActive::class,
         ]);

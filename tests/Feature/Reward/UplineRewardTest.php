@@ -2,14 +2,15 @@
 
 namespace Tests\Feature\Reward;
 
+use App\Enums\MemberStatus;
 use App\Enums\RewardType;
 use App\Models\Member;
 use App\Models\RegistrySale;
 use App\Models\RewardLedger;
 use App\Models\UplineCalculation;
 use App\Models\User;
+use App\Services\DirectRewardService;
 use App\Services\UplineRewardService;
-use App\Support\Money;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
@@ -149,7 +150,7 @@ class UplineRewardTest extends TestCase
         ['seller' => $seller, 'uplines' => $uplines] = $this->chain(6);
 
         // Make the nearest upline inactive.
-        $uplines[0]->update(['status' => \App\Enums\MemberStatus::Inactive]);
+        $uplines[0]->update(['status' => MemberStatus::Inactive]);
 
         $this->sell($seller);
 
@@ -171,7 +172,7 @@ class UplineRewardTest extends TestCase
     {
         // Three sponsors, the middle one inactive, nothing above them.
         ['seller' => $seller, 'uplines' => $uplines] = $this->chain(3);
-        $uplines[1]->update(['status' => \App\Enums\MemberStatus::Inactive]);
+        $uplines[1]->update(['status' => MemberStatus::Inactive]);
 
         $this->sell($seller);
 
@@ -190,7 +191,7 @@ class UplineRewardTest extends TestCase
         ['seller' => $seller, 'uplines' => $uplines] = $this->chain(3);
 
         foreach ($uplines as $upline) {
-            $upline->update(['status' => \App\Enums\MemberStatus::Inactive]);
+            $upline->update(['status' => MemberStatus::Inactive]);
         }
 
         $this->sell($seller);
@@ -350,7 +351,7 @@ class UplineRewardTest extends TestCase
     public function compression_is_auditable(): void
     {
         ['seller' => $seller, 'uplines' => $uplines] = $this->chain(3);
-        $uplines[0]->update(['status' => \App\Enums\MemberStatus::Inactive]);
+        $uplines[0]->update(['status' => MemberStatus::Inactive]);
 
         $this->sell($seller);
         $this->service->calculate('2026-06', $this->admin);
@@ -382,7 +383,7 @@ class UplineRewardTest extends TestCase
         ['seller' => $seller, 'uplines' => $uplines] = $this->chain(1);
         $this->sell($seller);
 
-        app(\App\Services\DirectRewardService::class)->calculate('2026-06', $this->admin);
+        app(DirectRewardService::class)->calculate('2026-06', $this->admin);
         $this->service->calculate('2026-06', $this->admin);
 
         // Direct: seller gets 1500 × 40 = 60,000

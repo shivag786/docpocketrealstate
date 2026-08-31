@@ -1,5 +1,18 @@
 @extends('layouts.admin')
 
+@php
+    /**
+     * A member with no sponsor sits directly under the Company Club, which is a
+     * system entity with no member row. "Root" was the old wording for exactly
+     * the same thing and is no longer used in the UI. The name is read from the
+     * Company Club settings, so renaming the club renames it here too.
+     *
+     * Resolved ONCE per page rather than per row.
+     */
+    $clubName = \App\Models\CompanyClubSetting::current()->name();
+@endphp
+
+
 @section('title', 'Members')
 @section('page-title', 'Members')
 
@@ -41,7 +54,7 @@
                     <label for="sponsor" class="form-label small mb-1">Position</label>
                     <select id="sponsor" name="sponsor" class="form-select form-select-sm">
                         <option value="">All</option>
-                        <option value="root" @selected(($filters['sponsor'] ?? '') === 'root')>Root only</option>
+                        <option value="root" @selected(($filters['sponsor'] ?? '') === 'root')>Under {{ $clubName }} only</option>
                     </select>
                 </div>
 
@@ -101,7 +114,10 @@
                                     </a>
                                     <div class="small text-muted">{{ $member->sponsor->name }}</div>
                                 @else
-                                    <span class="badge text-bg-light border">Root</span>
+                                    {{-- No sponsor means the member sits directly under the Company Club,
+                                         which is a system entity rather than a member. "Root" was
+                                         the old wording for the same thing. --}}
+                                    <span class="badge text-bg-primary">{{ $clubName }}</span>
                                 @endif
                             </td>
                             <td class="text-center">

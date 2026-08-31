@@ -11,10 +11,18 @@
 const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 300;
 
+// Above this many nodes, "Expand next level" asks before firing that many
+// requests. A large network should not be loaded by accident.
+const EXPAND_WARN_AT = 40;
+
 function initMemberTree(root) {
     const container = root.querySelector('[data-tree-container]');
     const loading = root.querySelector('[data-tree-loading]');
     if (!container) return;
+
+    // Falls back only if the page forgot the attribute; the real value comes
+    // from the Company Club settings.
+    const clubName = root.dataset.clubName || 'Company Club';
 
     const urls = {
         children: root.dataset.childrenUrl,
@@ -151,6 +159,7 @@ function initMemberTree(root) {
 
         nodes.forEach((node) => target.appendChild(buildCard(node)));
         applyLevelFilter();
+        refreshControls();
     };
 
     // ---------------------------------------------------------------- behaviour
@@ -172,6 +181,7 @@ function initMemberTree(root) {
             childrenBox.classList.add('d-none');
             toggle.innerHTML = '<i class="bi bi-plus-square"></i>';
             toggle.setAttribute('aria-expanded', 'false');
+            refreshControls();
             return;
         }
 
@@ -196,6 +206,7 @@ function initMemberTree(root) {
         childrenBox.classList.remove('d-none');
         toggle.innerHTML = '<i class="bi bi-dash-square"></i>';
         toggle.setAttribute('aria-expanded', 'true');
+        refreshControls();
     }
 
     /** Re-root the tree at one member. */
@@ -268,28 +279,130 @@ function initMemberTree(root) {
 
     // ---------------------------------------------------------------- controls
 
-    document.querySelector('[data-tree-collapse]')?.addEventListener('click', () => {
+    const expandBtn = document.querySelector('[data-tree-expand]');
+    const collapseBtn = document.querySelector('[data-tree-collapse]');
+
+    /** The parts of one rendered node, addressed the same way everywhere. */
+    const partsOf = (wrapper) => ({
+        box: wrapper.querySelector(':scope > .tree-children'),
+        toggle: wrapper.querySelector(':scope > .tree-card > .tree-toggle'),
+        id: Number(wrapper.dataset.nodeId),
+        level: Number(wrapper.dataset.level),
+    });
+
+    /** Visible nodes that have a downline and are currently closed. */
+    const closedNodes = () =>
+        [...container.querySelectorAll('.tree-node')]
+            .filter((wrapper) => !wrapper.classList.contains('d-none'))
+            .filter((wrapper) => {
+                const { box, toggle } = partsOf(wrapper);
+
+                return box?.classList.contains('d-none') && toggle && !toggle.disabled;
+            });
+
+    const openBoxes = () =>
+        [...container.querySelectorAll('.tree-children')]
+            .filter((box) => !box.classList.contains('d-none'));
+
+    /**
+     * Keep the two controls honest about whether they can do anything.
+     *
+     * A button that silently does nothing reads as broken, which is exactly how
+     * these were reported. Now they disable themselves and say why.
+     */
+    function refreshControls() {
+        const canExpand = closedNodes().length;
+        const canCollapse = openBoxes().length;
+
+        if (expandBtn) {
+            expandBtn.disabled = canExpand === 0;
+            expandBtn.title = canExpand === 0
+                ? 'Every member currently shown is already expanded.'
+                : `Load and open the next level for ${canExpand} member${canExpand === 1 ? '' : 's'}.`;
+        }
+
+        if (collapseBtn) {
+            collapseBtn.disabled = canCollapse === 0;
+            collapseBtn.title = canCollapse === 0
+                ? 'Nothing is expanded yet.'
+                : 'Close every open branch.';
+        }
+    }
+
+    /** Open one node, fetching its children the first time. */
+    async function openNode(wrapper) {
+        const { box, toggle, id, level } = partsOf(wrapper);
+
+        if (!box || !toggle || toggle.disabled || !box.classList.contains('d-none')) {
+            return;
+        }
+
+        if (!loaded.has(id)) {
+            const children = await fetchChildren(id, level);
+            renderInto(box, children);
+            loaded.add(id);
+        }
+
+        box.classList.remove('d-none');
+        toggle.innerHTML = '<i class="bi bi-dash-square"></i>';
+        toggle.setAttribute('aria-expanded', 'true');
+    }
+
+    collapseBtn?.addEventListener('click', () => {
         container.querySelectorAll('.tree-children').forEach((box) => box.classList.add('d-none'));
         container.querySelectorAll('.tree-toggle').forEach((toggle) => {
             if (toggle.disabled) return;
             toggle.innerHTML = '<i class="bi bi-plus-square"></i>';
             toggle.setAttribute('aria-expanded', 'false');
         });
+
+        refreshControls();
     });
 
-    // Expands only what has already been fetched — it never triggers a
-    // network-wide load.
-    document.querySelector('[data-tree-expand]')?.addEventListener('click', () => {
-        container.querySelectorAll('.tree-children').forEach((box) => {
-            if (box.childElementCount > 0) box.classList.remove('d-none');
-        });
-        container.querySelectorAll('.tree-toggle').forEach((toggle) => {
-            const box = toggle.closest('.tree-node')?.querySelector(':scope > .tree-children');
-            if (box?.childElementCount > 0) {
-                toggle.innerHTML = '<i class="bi bi-dash-square"></i>';
-                toggle.setAttribute('aria-expanded', 'true');
+    /**
+     * Open the NEXT level of everything currently on screen.
+     *
+     * This used to expand only branches that had already been fetched, which
+     * meant that on a freshly loaded page — where nothing has been fetched — it
+     * did nothing at all and looked broken.
+     *
+     * It now fetches, but strictly ONE level per press: the set of nodes to open
+     * is snapshotted before any of them opens, so newly revealed children are
+     * not themselves expanded in the same click. Lazy loading is preserved and
+     * pressing the button repeatedly walks down the tree a level at a time.
+     */
+    expandBtn?.addEventListener('click', async () => {
+        const targets = closedNodes();
+
+        if (targets.length === 0) {
+            refreshControls();
+
+            return;
+        }
+
+        if (targets.length > EXPAND_WARN_AT
+            && !window.confirm(
+                `This will load the next level for ${targets.length} members. Continue?`
+            )) {
+            return;
+        }
+
+        const original = expandBtn.innerHTML;
+        expandBtn.disabled = true;
+        expandBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Expanding…';
+
+        try {
+            // Sequential on purpose: a wide level would otherwise fire dozens of
+            // simultaneous requests at the server.
+            for (const wrapper of targets) {
+                await openNode(wrapper);
             }
-        });
+        } catch (error) {
+            window.App.notify(error.message, 'danger');
+        } finally {
+            expandBtn.innerHTML = original;
+            refreshControls();
+        }
     });
 
     document.querySelector('[data-tree-reset]')?.addEventListener('click', (event) => {
@@ -301,6 +414,7 @@ function initMemberTree(root) {
     document.querySelector('[data-tree-level]')?.addEventListener('change', (event) => {
         levelFilter = event.target.value === '' ? null : Number(event.target.value);
         applyLevelFilter();
+        refreshControls();
     });
 
     // Search
@@ -348,9 +462,13 @@ function initMemberTree(root) {
                             <div class="small text-muted"></div>`;
                         item.querySelector('strong').textContent = member.member_code;
                         item.querySelector('span span').textContent = member.name;
+                        // No sponsor means the member sits directly under the
+                        // Company Club, which is a system entity with no member
+                        // row. The name comes from its settings, so renaming the
+                        // club renames it here too.
                         item.querySelector('.small').textContent = member.sponsor
                             ? `Sponsor: ${member.sponsor.member_code} — ${member.sponsor.name}`
-                            : 'Root member';
+                            : `Directly under ${clubName}`;
 
                         item.addEventListener('click', () => {
                             searchResults.classList.add('d-none');

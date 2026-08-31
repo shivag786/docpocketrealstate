@@ -23,36 +23,105 @@
             ['label' => 'Sales History', 'icon' => 'bi-clock-history', 'route' => 'admin.sales.index', 'active' => 'admin.sales.index', 'phase' => 4],
         ],
         'Rewards' => [
-            ['label' => 'Calculations', 'icon' => 'bi-calculator', 'route' => 'admin.calculations.index', 'active' => 'admin.calculations.*', 'phase' => 12],
-            ['label' => 'Direct Sale', 'icon' => 'bi-cash-coin', 'route' => 'admin.rewards.direct-sales', 'active' => 'admin.rewards.direct-sales', 'phase' => 5],
-            [
-                'label' => 'One Month Target',
+            ['label' => 'Calculations', 'icon' => 'bi-calculator', 'route' => 'admin.calculations.index', 'active' => 'admin.calculations.*', 'phase' => 5],
+            // Matches the direct ledger too, so that page is not left with no
+            // menu entry highlighted at all.
+            ['label' => 'Direct Sale', 'icon' => 'bi-cash-coin', 'route' => 'admin.rewards.direct-sales', 'active' => 'admin.rewards.direct*', 'phase' => 5],
+            // The three targets are the same two pages with a different level.
+            // A member is measured against exactly one at a time, so they are
+            // three separate populations and each gets its own menu entry.
+            ...array_map(fn (App\Enums\TargetLevel $level) => [
+                'label' => $level->label(),
                 'icon' => 'bi-bullseye',
                 'active' => 'admin.targets.*',
-                'phase' => 8,
+                'level' => $level->value,
+                'phase' => 7 + $level->value,
                 'children' => [
-                    ['label' => 'Achieved', 'route' => 'admin.targets.achieved', 'active' => 'admin.targets.achieved', 'phase' => 8],
-                    ['label' => 'Not Reached', 'route' => 'admin.targets.missed', 'active' => 'admin.targets.missed', 'phase' => 8],
+                    ['label' => 'Achieved', 'route' => 'admin.targets.achieved', 'active' => 'admin.targets.achieved', 'level' => $level->value, 'phase' => 8],
+                    ['label' => 'Not Reached', 'route' => 'admin.targets.missed', 'active' => 'admin.targets.missed', 'level' => $level->value, 'phase' => 8],
+                ],
+            ], App\Enums\TargetLevel::all()),
+            // Upline is hidden at the client's request (2026-08-27). The engine
+            // still runs and still pays; only the screens are gone. Flipping
+            // rewards.visibility.upline back to true restores this entry.
+            ...(App\Enums\RewardType::Upline->isVisible() ? [
+                ['label' => 'Upline Rewards', 'icon' => 'bi-arrow-up-circle', 'route' => 'admin.rewards.upline', 'active' => 'admin.rewards.upline*', 'phase' => 6],
+            ] : []),
+            ['label' => 'Team Sales', 'icon' => 'bi-people', 'route' => 'admin.rewards.team-sales', 'active' => 'admin.rewards.team-sales*', 'phase' => 7],
+            // A separate module with its own seven screens, so it gets a
+            // submenu rather than being folded into Calculations or Upline.
+            [
+                'label' => 'Company Club',
+                'icon' => 'bi-award',
+                'route' => 'admin.company-club.overview',
+                'active' => 'admin.company-club.*',
+                'phase' => 11,
+                'children' => [
+                    ['label' => 'Overview', 'route' => 'admin.company-club.overview', 'active' => 'admin.company-club.overview'],
+                    ['label' => 'Network Tree', 'route' => 'admin.company-club.tree', 'active' => 'admin.company-club.tree'],
+                    ['label' => 'Monthly Calculation', 'route' => 'admin.company-club.calculate', 'active' => 'admin.company-club.calculate'],
+                    ['label' => 'Eligible Members', 'route' => 'admin.company-club.eligible', 'active' => 'admin.company-club.eligible'],
+                    ['label' => 'Reward Distribution', 'route' => 'admin.company-club.distribution', 'active' => 'admin.company-club.distribution'],
+                    ['label' => 'Income Distribution', 'route' => 'admin.company-club.income', 'active' => 'admin.company-club.income'],
+                    ['label' => 'Calculation History', 'route' => 'admin.company-club.history', 'active' => 'admin.company-club.history'],
+                    ['label' => 'Settings', 'route' => 'admin.company-club.settings', 'active' => 'admin.company-club.settings'],
                 ],
             ],
-            ['label' => 'Two Month Target', 'icon' => 'bi-bullseye', 'route' => null, 'phase' => 9],
-            ['label' => 'Three Month Target', 'icon' => 'bi-bullseye', 'route' => null, 'phase' => 10],
-            ['label' => 'Upline Rewards', 'icon' => 'bi-arrow-up-circle', 'route' => 'admin.calculations.upline.ledger', 'phase' => 6],
-            ['label' => 'Company Club', 'icon' => 'bi-award', 'route' => null, 'phase' => 11],
-            ['label' => 'Reward Ledger', 'icon' => 'bi-journal-text', 'route' => null, 'phase' => 13],
+            // Every rupee from all four engines in one table, plus the
+            // reconciliation that says whether the month adds up.
+            [
+                'label' => 'Reward Ledger',
+                'icon' => 'bi-journal-text',
+                'route' => 'admin.ledger.index',
+                'active' => 'admin.ledger.*',
+                'phase' => 13,
+                'children' => [
+                    ['label' => 'Complete Ledger', 'route' => 'admin.ledger.index', 'active' => 'admin.ledger.index'],
+                    ['label' => 'Reconciliation', 'route' => 'admin.ledger.reconciliation', 'active' => 'admin.ledger.reconciliation'],
+                ],
+            ],
         ],
         'Administration' => [
             ['label' => 'Reports', 'icon' => 'bi-file-earmark-bar-graph', 'route' => null, 'phase' => 14],
             ['label' => 'Audit Logs', 'icon' => 'bi-shield-check', 'route' => null, 'phase' => 16],
-            ['label' => 'Settings', 'icon' => 'bi-gear', 'route' => null, 'phase' => 16],
+            [
+                'label' => 'Settings',
+                'icon' => 'bi-gear',
+                'route' => 'admin.settings.edit',
+                'active' => 'admin.settings.*',
+                'phase' => 16,
+                'children' => [
+                    ['label' => 'Company', 'route' => 'admin.settings.edit', 'active' => 'admin.settings.edit'],
+                    ['label' => 'Welcome Letter', 'route' => 'admin.settings.letter', 'active' => 'admin.settings.letter'],
+                    ['label' => 'Password', 'route' => 'admin.settings.password', 'active' => 'admin.settings.password'],
+                    // Only when DEVELOPER_TOOLS is on — the same condition the
+                    // route is registered under, so this can never link nowhere.
+                    ...(config('company.developer_tools') ? [
+                        ['label' => 'Developer', 'route' => 'admin.settings.developer', 'active' => 'admin.settings.developer'],
+                    ] : []),
+                ],
+            ],
         ],
     ];
 @endphp
 
 <aside class="app-sidebar" id="appSidebar">
+    @php
+        // The company row is created from config on first read, so this never
+        // needs a null check and a fresh install shows the configured name
+        // rather than nothing.
+        $company = \App\Models\CompanySetting::current();
+        $companyLogo = $company->logoUrl();
+    @endphp
+
     <a href="{{ route('admin.dashboard') }}" class="app-brand">
-        <i class="bi bi-building-fill-check me-2"></i>
-        <span class="text-truncate">{{ config('app.name') }}</span>
+        @if ($companyLogo)
+            <img src="{{ $companyLogo }}" alt=""
+                 class="me-2" style="height: 24px; width: auto; max-width: 40px; object-fit: contain;">
+        @else
+            <i class="bi bi-building-fill-check me-2"></i>
+        @endif
+        <span class="text-truncate">{{ $company->name() }}</span>
     </a>
 
     <nav class="nav flex-column pb-4" aria-label="Main navigation">
@@ -61,10 +130,18 @@
 
             @foreach ($items as $item)
                 @php
-                    $isActive = ! empty($item['route']) && request()->routeIs($item['active'] ?? $item['route']);
+                    // The three target groups share one route pattern and are
+                    // told apart by ?level=, so route matching alone would open
+                    // all three at once.
+                    $levelMatches = ! isset($item['level'])
+                        || (int) request()->query('level', 1) === $item['level'];
+
+                    $isActive = ! empty($item['route'])
+                        && request()->routeIs($item['active'] ?? $item['route'])
+                        && $levelMatches;
                     $hasChildren = ! empty($item['children']);
                     // A parent counts as open when any of its pages is showing.
-                    $groupOpen = $hasChildren && request()->routeIs($item['active']);
+                    $groupOpen = $hasChildren && request()->routeIs($item['active']) && $levelMatches;
                 @endphp
 
                 @if ($hasChildren)
@@ -84,9 +161,14 @@
                     <div class="collapse {{ $groupOpen ? 'show' : '' }}" id="{{ $groupId }}">
                         <div class="nav flex-column nav-submenu">
                             @foreach ($item['children'] as $child)
-                                @php $childActive = request()->routeIs($child['active'] ?? $child['route']); @endphp
+                                @php
+                                    $childParams = isset($child['level']) ? ['level' => $child['level']] : [];
+                                    $childActive = request()->routeIs($child['active'] ?? $child['route'])
+                                        && (! isset($child['level'])
+                                            || (int) request()->query('level', 1) === $child['level']);
+                                @endphp
 
-                                <a href="{{ route($child['route']) }}"
+                                <a href="{{ route($child['route'], $childParams) }}"
                                    class="nav-link {{ $childActive ? 'active' : '' }}"
                                    @if ($childActive) aria-current="page" @endif>
                                     <span>{{ $child['label'] }}</span>

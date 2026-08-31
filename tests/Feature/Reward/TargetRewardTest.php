@@ -5,13 +5,16 @@ namespace Tests\Feature\Reward;
 use App\Enums\CalculationRunType;
 use App\Enums\MemberStatus;
 use App\Enums\RewardType;
+use App\Enums\TargetLevel;
 use App\Models\Member;
 use App\Models\RegistrySale;
 use App\Models\RewardLedger;
 use App\Models\TargetCalculation;
 use App\Models\User;
+use App\Services\DirectRewardService;
 use App\Services\TargetRewardService;
 use App\Services\TeamSalesService;
+use App\Services\UplineRewardService;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -19,7 +22,7 @@ use RuntimeException;
 use Tests\TestCase;
 
 /**
- * Target 1 — one calendar month, 5,000 Sq.Ft., ₹150,000.
+ * Target 1 — one calendar month, 5,000 Sq.Ft., ₹50,000.
  *
  * Every rule confirmed by the client on 2026-08-17
  * (docs/02_BUSINESS_RULES.md §3.1) has a test here, including the ones that are
@@ -65,11 +68,43 @@ class TargetRewardTest extends TestCase
     }
 
     // -----------------------------------------------------------------
+    // The confirmed prizes
+    // -----------------------------------------------------------------
+
+    #[Test]
+    public function the_confirmed_prizes_and_their_derived_rates_stay_consistent(): void
+    {
+        // Client-confirmed 2026-08-25. Pinned here so a prize can never be
+        // edited by accident, and so a prize edited WITHOUT its rate fails
+        // loudly instead of quietly breaking ledger reconciliation, which reads
+        // sqft x rate = amount on every row.
+        $confirmed = [
+            1 => ['sqft' => '5000.00', 'prize' => '50000.00', 'months' => 1],
+            2 => ['sqft' => '10000.00', 'prize' => '200000.00', 'months' => 2],
+            3 => ['sqft' => '35000.00', 'prize' => '700000.00', 'months' => 3],
+        ];
+
+        foreach (TargetLevel::all() as $level) {
+            $expected = $confirmed[$level->value];
+
+            $this->assertSame($expected['sqft'], $level->sqft(), $level->label().' threshold');
+            $this->assertSame($expected['prize'], $level->reward(), $level->label().' prize');
+            $this->assertSame($expected['months'], $level->months(), $level->label().' window');
+
+            $this->assertSame(
+                $level->reward(),
+                bcmul($level->sqft(), $level->rate(), 2),
+                $level->label().': the derived rate must still reproduce the prize.'
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------
     // The acceptance case
     // -----------------------------------------------------------------
 
     #[Test]
-    public function exactly_five_thousand_sqft_achieves_the_target_and_pays_150000(): void
+    public function exactly_five_thousand_sqft_achieves_the_target_and_pays_50000(): void
     {
         $member = Member::factory()->create();
         $this->sell($member, '5000.00');
@@ -82,7 +117,7 @@ class TargetRewardTest extends TestCase
         $this->assertTrue($verdict->achieved);
         $this->assertSame('5000.00', $verdict->achieved_sqft);
         $this->assertSame('5000.00', $verdict->target_sqft);
-        $this->assertSame('150000.00', $verdict->reward_amount);
+        $this->assertSame('50000.00', $verdict->reward_amount);
         $this->assertSame('0.00', $verdict->shortfall_sqft);
     }
 
@@ -123,9 +158,10 @@ class TargetRewardTest extends TestCase
         $this->assertTrue($verdict->achieved);
         $this->assertSame('7000.00', $verdict->achieved_sqft);
 
-        // 5,000 × 30, NOT 7,000 × 30 = 210,000.
-        $this->assertSame('150000.00', $verdict->reward_amount);
-        $this->assertNotSame('210000.00', $verdict->reward_amount);
+        // The prize for REACHING 5,000 — a fixed ₹50,000, not something
+        // scaled to the 7,000 they actually sold.
+        $this->assertSame('50000.00', $verdict->reward_amount);
+        $this->assertNotSame('70000.00', $verdict->reward_amount);
 
         // The surplus is visible but explicitly unpaid.
         $this->assertSame('2000.00', $verdict->surplusSqft());
@@ -145,8 +181,10 @@ class TargetRewardTest extends TestCase
 
         // 9,000 was sold, but 5,000 is what was paid on.
         $this->assertSame('5000.00', $entry->sqft);
-        $this->assertSame('30.00', $entry->rate);
-        $this->assertSame('150000.00', $entry->amount);
+        // The rate is derived from the prize (50,000 / 5,000), and exists only
+        // so this invariant still holds for reconciliation.
+        $this->assertSame('10.00', $entry->rate);
+        $this->assertSame('50000.00', $entry->amount);
         $this->assertSame(
             $entry->amount,
             bcmul($entry->sqft, $entry->rate, 2),
@@ -165,13 +203,17 @@ class TargetRewardTest extends TestCase
 
         $this->assertSame('3000.00', $this->verdictFor($member, '2026-06')->surplusSqft());
 
-        // July starts from zero: 2,000 sold is 2,000 measured, not 5,000.
+        // July opens their Target 2 window. It starts from ZERO: the 3,000
+        // surplus is gone, so 2,000 sold is 2,000 accumulated — not 5,000.
         $this->sell($member, '2000.00', '2026-07');
         $this->team->calculate('2026-07', $this->admin);
         $this->service->calculate('2026-07', $this->admin);
 
-        // They already achieved Target 1, so they are no longer measured at all.
-        $this->assertNull($this->verdictFor($member, '2026-07'));
+        $july = $this->verdictFor($member, '2026-07');
+        $this->assertSame(TargetLevel::Two, $july->target_level, 'Achieving Target 1 opens Target 2.');
+        $this->assertSame('2000.00', $july->cumulative_sqft, 'The surplus did not carry across.');
+        $this->assertSame('2026-07', $july->window_start);
+        $this->assertFalse($july->achieved);
     }
 
     // -----------------------------------------------------------------
@@ -246,7 +288,7 @@ class TargetRewardTest extends TestCase
         $verdict = $this->verdictFor($solo);
 
         $this->assertTrue($verdict->achieved);
-        $this->assertSame('150000.00', $verdict->reward_amount);
+        $this->assertSame('50000.00', $verdict->reward_amount);
         // Own sales and team sales are the same figure for a member with nobody below.
         $this->assertSame('5500.00', $verdict->own_sqft);
         $this->assertSame('5500.00', $verdict->achieved_sqft);
@@ -290,7 +332,7 @@ class TargetRewardTest extends TestCase
 
         $this->assertSame(3, RewardLedger::where('reward_type', RewardType::Target)->count());
         $this->assertSame(
-            '450000.00',
+            '150000.00', // three separate ₹50,000 prizes, from one sale
             RewardLedger::where('reward_type', RewardType::Target)->sum('amount')
         );
     }
@@ -309,7 +351,7 @@ class TargetRewardTest extends TestCase
 
         $june = $this->verdictFor($member, '2026-06');
         $this->assertFalse($june->achieved);
-        $this->assertSame(1, $june->target_level, 'A failed member stays on Target 1.');
+        $this->assertSame(TargetLevel::One, $june->target_level, 'A failed member stays on Target 1.');
 
         // July: same target, unchanged threshold, and this time they reach it.
         $this->sell($member, '5000.00', '2026-07');
@@ -318,7 +360,7 @@ class TargetRewardTest extends TestCase
 
         $july = $this->verdictFor($member, '2026-07');
         $this->assertTrue($july->achieved);
-        $this->assertSame(1, $july->target_level);
+        $this->assertSame(TargetLevel::One, $july->target_level);
         $this->assertSame('5000.00', $july->target_sqft, 'The threshold is never raised by a failure.');
     }
 
@@ -351,16 +393,27 @@ class TargetRewardTest extends TestCase
         $this->runTargets('2026-06');
         $this->assertTrue($this->verdictFor($member, '2026-06')->achieved);
 
-        // A bigger month afterwards must not produce a second ₹150,000.
+        // A bigger month afterwards must not produce a second ₹50,000. It is
+        // measured against TARGET 2 instead, which is a different reward.
         $this->sell($member, '20000.00', '2026-07');
         $this->team->calculate('2026-07', $this->admin);
         $this->service->calculate('2026-07', $this->admin);
 
-        $this->assertNull($this->verdictFor($member, '2026-07'));
-        $this->assertSame(1, RewardLedger::where('member_id', $member->id)
-            ->where('reward_type', RewardType::Target)->count());
-        $this->assertSame('150000.00', RewardLedger::where('member_id', $member->id)
-            ->where('reward_type', RewardType::Target)->sum('amount'));
+        $july = $this->verdictFor($member, '2026-07');
+        $this->assertSame(TargetLevel::Two, $july->target_level);
+        $this->assertSame('10000.00', $july->target_sqft);
+
+        $targetRewards = RewardLedger::where('member_id', $member->id)
+            ->where('reward_type', RewardType::Target)
+            ->orderBy('id')
+            ->get();
+
+        // Two rewards, one per target — never the same target twice.
+        $this->assertSame(['50000.00', '200000.00'], $targetRewards->pluck('amount')->all());
+        $this->assertSame(0, TargetCalculation::query()
+            ->where('member_id', $member->id)
+            ->where('achieved_level', TargetLevel::One->value)
+            ->count() - 1, 'Target 1 was achieved exactly once.');
     }
 
     #[Test]
@@ -379,12 +432,12 @@ class TargetRewardTest extends TestCase
             'period' => '2026-07',
             'target_level' => 1,
             'target_sqft' => '5000.00',
-            'rate' => '30.00',
+            'rate' => '10.00',
             'achieved_sqft' => '5000.00',
             'own_sqft' => '5000.00',
             'achieved' => true,
             'shortfall_sqft' => '0.00',
-            'reward_amount' => '150000.00',
+            'reward_amount' => '50000.00',
             'achieved_level' => 1,
             'calculation_run_id' => TargetCalculation::first()->calculation_run_id,
             'created_at' => now(),
@@ -425,7 +478,7 @@ class TargetRewardTest extends TestCase
         $verdict = $this->verdictFor($inactive);
 
         $this->assertTrue($verdict->achieved);
-        $this->assertSame('150000.00', $verdict->reward_amount);
+        $this->assertSame('50000.00', $verdict->reward_amount);
         $this->assertSame(1, RewardLedger::where('member_id', $inactive->id)
             ->where('reward_type', RewardType::Target)->count());
     }
@@ -472,14 +525,14 @@ class TargetRewardTest extends TestCase
         $this->team->calculate('2026-06', $this->admin);
         $run = $this->service->calculate('2026-06', $this->admin);
 
-        // 4 measured, 3 achieved.
+        // 4 measured, 3 achieved, at ₹50,000 each.
         $this->assertSame(4, $run->records_created);
-        $this->assertSame('450000.00', $run->total_amount);
+        $this->assertSame('150000.00', $run->total_amount);
 
         // total_sqft is what was PAID ON — the threshold once per achiever —
-        // so it reconciles exactly against the rate.
+        // so it reconciles exactly against Target 1's derived rate.
         $this->assertSame('15000.00', $run->total_sqft);
-        $this->assertSame($run->total_amount, bcmul($run->total_sqft, '30', 2));
+        $this->assertSame($run->total_amount, bcmul($run->total_sqft, '10', 2));
         $this->assertSame(
             $run->total_amount,
             RewardLedger::where('calculation_run_id', $run->id)->sum('amount')
@@ -523,8 +576,8 @@ class TargetRewardTest extends TestCase
 
         $this->sell($seller, '5000.00');
 
-        app(\App\Services\DirectRewardService::class)->calculate('2026-06', $this->admin);
-        app(\App\Services\UplineRewardService::class)->calculate('2026-06', $this->admin);
+        app(DirectRewardService::class)->calculate('2026-06', $this->admin);
+        app(UplineRewardService::class)->calculate('2026-06', $this->admin);
         $this->runTargets();
 
         // Direct: 5,000 × 40 to the seller.
@@ -535,9 +588,9 @@ class TargetRewardTest extends TestCase
         $this->assertSame('250000.00', RewardLedger::where('member_id', $upline->id)
             ->where('reward_type', RewardType::Upline)->sum('amount'));
 
-        // Target: both reached 5,000, so both get 150,000, and neither of the
+        // Target: both reached 5,000, so both win ₹50,000, and neither of the
         // above amounts changed.
-        $this->assertSame('300000.00', RewardLedger::where('reward_type', RewardType::Target)->sum('amount'));
+        $this->assertSame('100000.00', RewardLedger::where('reward_type', RewardType::Target)->sum('amount'));
     }
 
     #[Test]
@@ -551,7 +604,7 @@ class TargetRewardTest extends TestCase
 
         $this->assertSame(1, $preview['measured']);
         $this->assertSame(1, $preview['achieved']);
-        $this->assertSame('150000.00', $preview['total_amount']);
+        $this->assertSame('50000.00', $preview['total_amount']);
         $this->assertTrue($preview['team_sales_ready']);
 
         $this->assertSame(0, TargetCalculation::count());

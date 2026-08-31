@@ -40,6 +40,110 @@ class TargetPagesTest extends TestCase
     }
 
     #[Test]
+    public function the_achiever_count_reports_every_achiever_not_just_one(): void
+    {
+        // REGRESSION (2026-08-25): the summary tile read 1 while the list below
+        // it showed two members. `SUM(achieved) as achieved` was hydrated as a
+        // TargetCalculation, whose `achieved` cast is boolean — the sum came
+        // back as `true`, and `(int) true` is 1. Any month with more than one
+        // achiever under-reported, and "not reached" was overstated to match.
+        $leader = Member::factory()->create(['name' => 'Leader']);
+        $second = Member::factory()->sponsoredBy($leader)->create(['name' => 'Second']);
+        $missed = Member::factory()->create(['name' => 'Missed']);
+
+        // The downline's sale carries the leader over as well, so both achieve.
+        $this->sell($second, '5200.00');
+        $this->sell($missed, '900.00');
+
+        $this->calculate();
+
+        $response = $this->actingAs($this->admin)
+            ->get(route('admin.targets.achieved', ['period' => '2026-06', 'level' => 1]))
+            ->assertOk();
+
+        $this->assertSame(2, $response->viewData('achievedCount'));
+        $this->assertSame(3, $response->viewData('measured'));
+        $this->assertSame(1, $response->viewData('missedCount'));
+        $this->assertSame(2, $response->viewData('rows')->total());
+
+        // The tile and the list must agree — that is the whole bug.
+        $this->assertSame(
+            $response->viewData('rows')->total(),
+            $response->viewData('achievedCount'),
+        );
+
+        $this->assertSame('100000.00', $response->viewData('totalAmount'));
+    }
+
+    #[Test]
+    public function the_level_switcher_opens_each_target_on_its_own_population(): void
+    {
+        $winner = Member::factory()->create(['name' => 'Cleared Target One']);
+        $this->sell($winner, '5000.00', '2026-06');
+        $this->sell($winner, '1500.00', '2026-07');
+
+        $this->calculate('2026-06');
+        $this->calculate('2026-07');
+
+        // July: the member has moved to Target 2 and is inside an open window,
+        // so Target 1 no longer measures them at all.
+        $this->actingAs($this->admin)
+            ->get(route('admin.targets.missed', ['period' => '2026-07', 'level' => 1]))
+            ->assertOk()
+            ->assertDontSee($winner->member_code);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.targets.missed', ['period' => '2026-07', 'level' => 2]))
+            ->assertOk()
+            ->assertSee($winner->member_code)
+            ->assertSee('Two Month Target')
+            ->assertSee('In progress')
+            // The window and its running total, which is the whole point of the
+            // page on a multi-month target.
+            ->assertSee('2026-07 – 2026-08')
+            ->assertSee('1,500.00');
+    }
+
+    #[Test]
+    public function every_target_level_has_a_page_and_an_unknown_level_falls_back_to_the_first(): void
+    {
+        foreach ([1, 2, 3] as $level) {
+            $this->actingAs($this->admin)
+                ->get(route('admin.targets.achieved', ['period' => '2026-06', 'level' => $level]))
+                ->assertOk();
+        }
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.targets.achieved', ['period' => '2026-06', 'level' => 99]))
+            ->assertOk()
+            ->assertSee('One Month Target');
+    }
+
+    #[Test]
+    public function a_multi_month_verdict_shows_the_month_by_month_build_up(): void
+    {
+        $member = Member::factory()->create();
+        $this->sell($member, '5000.00', '2026-06');
+        $this->sell($member, '4000.00', '2026-07');
+        $this->sell($member, '6000.00', '2026-08');
+
+        $this->calculate('2026-06');
+        $this->calculate('2026-07');
+        $this->calculate('2026-08');
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.targets.show', [$member, 'period' => '2026-08']))
+            ->assertOk()
+            ->assertSee('Two Month Target')
+            ->assertSee('Window 2026-07 – 2026-08')
+            // 4,000 then 6,000, running to the 10,000 that won it.
+            ->assertSee('4,000.00')
+            ->assertSee('6,000.00')
+            ->assertSee('10,000.00')
+            ->assertSee('200,000.00');
+    }
+
+    #[Test]
     public function guests_cannot_reach_any_target_page(): void
     {
         $member = Member::factory()->create();
@@ -65,7 +169,7 @@ class TargetPagesTest extends TestCase
             ->get(route('admin.targets.achieved', ['period' => '2026-06']))
             ->assertOk()
             ->assertSee($winner->member_code)
-            ->assertSee('150,000.00')
+            ->assertSee('50,000.00')
             ->assertDontSee($loser->member_code);
     }
 
@@ -223,7 +327,7 @@ class TargetPagesTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('admin.targets.achieved', ['period' => '2026-06']))
             ->assertOk()
-            ->assertSee('has not been calculated for 2026-06');
+            ->assertSee('Targets have not been calculated for 2026-06');
     }
 
     #[Test]

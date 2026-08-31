@@ -32,6 +32,10 @@ class PeriodRecalculationService
 {
     /**
      * Engines in dependency order. Team Sales before Target, always.
+     *
+     * Company Club is NOT in this list. It is rebuilt separately, after these
+     * four, and only for a month an admin has already calculated once - see
+     * `recalculate()`.
      */
     private const ORDER = [
         CalculationRunType::Direct,
@@ -45,6 +49,7 @@ class PeriodRecalculationService
         private readonly UplineRewardService $upline,
         private readonly TeamSalesService $team,
         private readonly TargetRewardService $targets,
+        private readonly CompanyClubService $companyClub,
         private readonly CalculationRunService $runs,
     ) {}
 
@@ -64,7 +69,16 @@ class PeriodRecalculationService
         $this->runs->assertValidPeriod($period);
         $this->runs->assertPeriodNotPaid($period);
 
-        return DB::transaction(function () use ($period, $initiatedBy) {
+        // Targets 2 and 3 accumulate across months, so a change here moves every
+        // later verdict too. Those months must be rebuildable before anything is
+        // written, or the rebuild would leave the ladder half-updated.
+        $laterPeriods = $this->periodsAfter($period);
+
+        foreach ($laterPeriods as $later) {
+            $this->runs->assertPeriodNotPaid($later);
+        }
+
+        return DB::transaction(function () use ($period, $initiatedBy, $laterPeriods) {
             $completed = [];
 
             foreach (self::ORDER as $type) {
@@ -77,8 +91,58 @@ class PeriodRecalculationService
                 };
             }
 
+            // Only Target cascades. Direct, Upline and Team Sales each describe
+            // one month and nothing else, so a later month's figures for them
+            // are untouched by a change here.
+            foreach ($laterPeriods as $later) {
+                $completed['target:'.$later] = $this->targets->recalculate($later, $initiatedBy);
+            }
+
+            /*
+             * Company Club runs LAST, and only when the month already has a
+             * completed run.
+             *
+             * Client-confirmed 2026-08-19: recalculation should keep the figures
+             * current. But the FIRST calculation of a month has to stay an
+             * admin's explicit decision - previewed, then confirmed - so a month
+             * nobody has calculated is deliberately left untouched here and
+             * `recalculateIfCalculated()` returns null for it.
+             *
+             * It runs inside the same transaction as the other four on purpose.
+             * A month is one consistent picture; a Company Club failure that left
+             * fresh Direct figures beside stale Company Club ones would be worse
+             * than the whole rebuild failing and being reported.
+             *
+             * Company Club does NOT cascade into later periods. Its pool is one
+             * month's sales and nothing else - unlike Target, which accumulates
+             * across a window.
+             */
+            $club = $this->companyClub->recalculateIfCalculated($period, $initiatedBy);
+
+            if ($club !== null) {
+                $completed[CalculationRunType::CompanyClub->value] = $club->calculationRun;
+            }
+
             return $completed;
         });
+    }
+
+    /**
+     * Months after `$period` whose target verdicts depend on it.
+     *
+     * A month qualifies if it has ever been rolled up or judged — those are
+     * exactly the months holding stored figures that the change could falsify.
+     *
+     * @return array<int, string>
+     */
+    public function periodsAfter(string $period): array
+    {
+        $fromTeam = DB::table('team_calculations')->where('period', '>', $period)->distinct()->pluck('period');
+        $fromTargets = DB::table('target_calculations')->where('period', '>', $period)->distinct()->pluck('period');
+
+        $periods = $fromTeam->merge($fromTargets)->unique()->sort()->values()->all();
+
+        return array_map('strval', $periods);
     }
 
     /**
@@ -114,40 +178,57 @@ class PeriodRecalculationService
     }
 
     /**
+     * Whether one period's stored figures still match its sales.
+     *
+     * Judged on Sq.Ft. against the DIRECT run, because Direct is the only engine
+     * whose stored total is the plain sum of the period's approved sales. Upline
+     * divides through the network, Team Sales counts the same Sq.Ft. once per
+     * leader in the chain, and Target stores the threshold it paid on — a
+     * difference in any of those would not tell you whether a sale went missing.
+     *
+     * @return array{period: string, live_sqft: string, run_sqft: string, calculated: bool, in_step: bool, locked: bool}
+     */
+    public function periodStatus(string $period): array
+    {
+        $liveSqft = (string) (RegistrySale::query()
+            ->approved()
+            ->forPeriod($period)
+            ->sum('sqft') ?: '0.00');
+
+        $run = $this->runs->completedRun($period, CalculationRunType::Direct);
+        $runSqft = (string) ($run?->total_sqft ?? '0.00');
+
+        return [
+            'period' => $period,
+            'live_sqft' => $liveSqft,
+            'run_sqft' => $runSqft,
+            'calculated' => $run !== null,
+            'in_step' => bccomp($liveSqft, $runSqft, 2) === 0,
+            'locked' => $this->runs->periodIsPaid($period),
+        ];
+    }
+
+    /**
      * Periods whose stored figures no longer match their sales.
      *
      * Recalculation is automatic, so this should normally be empty. It will not
      * be for months that were locked by a payment, or that predate automatic
      * recalculation — which is exactly when an operator needs telling.
      *
-     * @return array<int, array{period: string, live_sqft: string, run_sqft: string, locked: bool}>
+     * @return array<int, array{period: string, live_sqft: string, run_sqft: string, calculated: bool, in_step: bool, locked: bool}>
      */
     public function stalePeriods(): array
     {
-        $stale = [];
-
         $periods = RegistrySale::query()
             ->approved()
             ->selectRaw("DATE_FORMAT(registry_date, '%Y-%m') as period")
-            ->selectRaw('COALESCE(SUM(sqft), 0) as live_sqft')
             ->groupBy('period')
             ->orderByDesc('period')
-            ->get();
+            ->pluck('period');
 
-        foreach ($periods as $row) {
-            $run = $this->runs->completedRun($row->period, CalculationRunType::Direct);
-            $runSqft = $run?->total_sqft ?? '0.00';
-
-            if (bccomp((string) $row->live_sqft, (string) $runSqft, 2) !== 0) {
-                $stale[] = [
-                    'period' => $row->period,
-                    'live_sqft' => (string) $row->live_sqft,
-                    'run_sqft' => (string) $runSqft,
-                    'locked' => $this->runs->periodIsPaid($row->period),
-                ];
-            }
-        }
-
-        return $stale;
+        return array_values(array_filter(
+            array_map(fn (string $period) => $this->periodStatus($period), $periods->all()),
+            fn (array $status) => ! $status['in_step'],
+        ));
     }
 }

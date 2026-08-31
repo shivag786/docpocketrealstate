@@ -8,366 +8,323 @@
 @endsection
 
 @section('content')
-    {{-- Period selection is required before any engine can run
-         (docs/04_UI_UX_SPECIFICATION.md). --}}
+    {{-- What this page is for.
+         It is deliberately the first thing on the page. Before this, the screen
+         opened straight into a period picker and four "Calculate" buttons for
+         work that had already happened by itself, and never said so. --}}
+    <div class="card mb-3 border-primary-subtle">
+        <div class="card-body d-flex gap-3">
+            <i class="bi bi-info-circle-fill text-primary fs-4"></i>
+            <div>
+                <h6 class="mb-1">Nothing here needs pressing day to day.</h6>
+                <p class="small text-muted mb-2">
+                    Every time a sale is entered, all four engines are rebuilt for that
+                    sale's month automatically, in one operation. This page exists to
+                    <strong>show you that it worked</strong> — each engine is worked out
+                    from the sales as they stand right now, beside what its last run
+                    actually stored. The two should agree.
+                </p>
+                <p class="small text-muted mb-0">
+                    Rebuild by hand only when they do not: a month locked by a confirmed
+                    payment, or a month calculated before automatic rebuilding existed.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    {{-- The actual reason to visit. Normally empty, so it only appears when it
+         has something to say. --}}
+    @if ($stale !== [])
+        <div class="alert alert-warning d-flex gap-3">
+            <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+            <div class="w-100">
+                <strong>
+                    {{ count($stale) }} {{ Str::plural('month', count($stale)) }}
+                    out of step with {{ count($stale) === 1 ? 'its' : 'their' }} sales.
+                </strong>
+                <div class="small mt-1">
+                    The sales in {{ count($stale) === 1 ? 'this month' : 'these months' }}
+                    no longer add up to what the calculation counted, so somebody is owed a
+                    figure that is not on the screen.
+                </div>
+                <ul class="small mb-0 mt-2 ps-3">
+                    @foreach ($stale as $row)
+                        <li class="mb-1">
+                            <a href="{{ route('admin.calculations.index', ['period' => $row['period']]) }}"
+                               class="fw-semibold">{{ $row['period'] }}</a>
+                            — sales hold {{ number_format((float) $row['live_sqft'], 2) }} Sq.Ft.,
+                            the calculation counted {{ number_format((float) $row['run_sqft'], 2) }}.
+                            @if ($row['locked'])
+                                <span class="badge text-bg-dark">Locked by a payment</span>
+                                — it cannot be rebuilt, because that would rewrite an amount
+                                somebody has already been paid.
+                            @endif
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        </div>
+    @endif
+
+    {{-- Period selection, and the state of the month it selects. --}}
     <div class="card mb-3">
-        <div class="card-body py-3">
-            <form method="GET" class="row g-2 align-items-end">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
                 <div class="col-12 col-md-4">
-                    <label for="period" class="form-label small mb-1 required-mark">Period</label>
-                    <input type="month" id="period" name="period" value="{{ $period }}"
-                           max="{{ now()->format('Y-m') }}"
-                           class="form-control form-control-sm" required>
+                    <form method="GET" class="row g-2 align-items-end">
+                        <div class="col-8">
+                            <label for="period" class="form-label small mb-1 required-mark">Month</label>
+                            <input type="month" id="period" name="period" value="{{ $period }}"
+                                   max="{{ now()->format('Y-m') }}"
+                                   class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-4">
+                            <button type="submit" class="btn btn-sm btn-outline-primary w-100">
+                                <i class="bi bi-arrow-repeat me-1"></i>Load
+                            </button>
+                        </div>
+                    </form>
                 </div>
-                <div class="col-12 col-md-3">
-                    <button type="submit" class="btn btn-sm btn-outline-primary">
-                        <i class="bi bi-arrow-repeat me-1"></i>Load period
-                    </button>
-                </div>
-            </form>
+
+                @if ($status)
+                    <div class="col-12 col-md-5">
+                        <div class="small text-muted mb-1">State of {{ $period }}</div>
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            @if ($status['locked'])
+                                <span class="badge text-bg-dark"><i class="bi bi-lock-fill me-1"></i>Locked by a payment</span>
+                            @elseif (! $monthIsOver)
+                                <span class="badge text-bg-info"><i class="bi bi-hourglass-split me-1"></i>Still running</span>
+                            @else
+                                <span class="badge text-bg-secondary"><i class="bi bi-calendar-check me-1"></i>Month over</span>
+                            @endif
+
+                            @if (! $status['calculated'])
+                                <span class="badge text-bg-light border">Never calculated</span>
+                            @elseif ($status['in_step'])
+                                <span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>In step with its sales</span>
+                            @else
+                                <span class="badge text-bg-warning"><i class="bi bi-exclamation-triangle me-1"></i>Out of step</span>
+                            @endif
+                        </div>
+                        <div class="small text-muted mt-2">
+                            @if ($status['locked'])
+                                A confirmed payment has frozen this month. Its figures can no
+                                longer be rebuilt.
+                            @elseif (! $monthIsOver)
+                                Figures are provisional and move as sales arrive. Rewards
+                                become payable once the month is over.
+                            @else
+                                The month has ended, so its figures have stopped moving and
+                                its rewards can be confirmed as paid.
+                            @endif
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-3 text-md-end">
+                        <form method="POST" action="{{ route('admin.calculations.rebuild') }}">
+                            @csrf
+                            <input type="hidden" name="period" value="{{ $period }}">
+                            <button type="submit"
+                                    class="btn btn-sm {{ $status['in_step'] ? 'btn-outline-secondary' : 'btn-primary' }}"
+                                    @disabled($status['locked'])
+                                    data-confirm-submit="Rebuild every engine for {{ $period }} from its current sales?">
+                                <i class="bi bi-arrow-clockwise me-1"></i>Rebuild {{ $period }}
+                            </button>
+                        </form>
+                        <div class="form-text mt-1">
+                            @if ($status['locked'])
+                                Unavailable — the month is locked.
+                            @else
+                                Runs all four engines in order.
+                            @endif
+                        </div>
+                    </div>
+                @endif
+            </div>
         </div>
     </div>
 
     @if ($previewError)
-        <div class="alert alert-danger d-flex gap-2"><i class="bi bi-exclamation-octagon mt-1"></i>
+        <div class="alert alert-danger d-flex gap-2">
+            <i class="bi bi-exclamation-octagon mt-1"></i>
             <div>{{ $previewError }}</div>
         </div>
     @endif
 
-    <div class="row g-3">
-        {{-- Direct — the only engine wired in Phase 5 --}}
-        <div class="col-12 col-lg-6">
-            <div class="card h-100">
-                <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <strong>Calculate Direct</strong>
-                    <span class="badge text-bg-primary">₹{{ config('rewards.rates.direct') }} / Sq.Ft.</span>
+    {{-- The four engines, live figure beside stored figure. A disagreement is
+         shown rather than left for the operator to work out. --}}
+    @foreach ($engines as $engine)
+        @php
+            $run = $engine['run'];
+            $comparable = $engine['comparable'];
+            $stored = $engine['unit'] === 'money' ? $run?->total_amount : $run?->total_sqft;
+            $agrees = $comparable && $run !== null
+                && bccomp((string) $engine['live'], (string) $stored, 2) === 0;
+            $format = fn ($value) => $engine['unit'] === 'money'
+                ? '₹'.number_format((float) $value, 2)
+                : number_format((float) $value, 2).' Sq.Ft.';
+        @endphp
+
+        <div class="card mb-3">
+            <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <strong>{{ $engine['label'] }}</strong>
+                    <div class="text-muted" style="font-size: .78rem;">{{ $engine['rule'] }}</div>
                 </div>
-                <div class="card-body">
-                    <p class="small text-muted">
-                        Own approved sale Sq.Ft. &times; ₹{{ config('rewards.rates.direct') }}.
-                        Target achievement does not affect this reward.
-                    </p>
 
-                    @if ($preview)
-                        <div class="row g-2 mb-3">
-                            @foreach ([
-                                ['Approved sales', number_format($preview['sales'])],
-                                ['Members', number_format($preview['members'])],
-                                ['Total Sq.Ft.', number_format((float) $preview['sqft'], 2)],
-                                ['Direct reward', '₹' . number_format((float) $preview['amount'], 2)],
-                            ] as [$label, $value])
-                                <div class="col-6">
-                                    <div class="border rounded p-2">
-                                        <div class="stat-label">{{ $label }}</div>
-                                        <div class="fw-semibold">{{ $value }}</div>
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
-                    @endif
-
-                    @if ($directRun)
-                        <div class="alert alert-success small d-flex gap-2 mb-3">
-                            <i class="bi bi-check-circle mt-1"></i>
-                            <div>
-                                Already calculated for {{ $period }} —
-                                <a href="{{ route('admin.calculations.show', $directRun) }}">run #{{ $directRun->id }}</a>
-                                on {{ $directRun->completed_at?->format('d M Y, H:i') }}.
-                                Recalculation is not available until Phase 12.
-                            </div>
-                        </div>
-
-                        <a href="{{ route('admin.calculations.direct.ledger', ['period' => $period]) }}"
-                           class="btn btn-outline-primary">
-                            <i class="bi bi-journal-text me-1"></i>View direct reward ledger
-                        </a>
-                    @else
-                        <form method="POST" action="{{ route('admin.calculations.direct') }}">
-                            @csrf
-                            <input type="hidden" name="period" value="{{ $period }}">
-                            <button type="submit" class="btn btn-primary"
-                                    @disabled(! $preview || $preview['sales'] === 0)
-                                    data-confirm-submit="Calculate direct rewards for {{ $period }}?">
-                                <i class="bi bi-calculator me-1"></i>Calculate Direct for {{ $period }}
-                            </button>
-                        </form>
-
-                        @if ($preview && $preview['sales'] === 0)
-                            <div class="form-text">No approved sales in this period.</div>
-                        @endif
-                    @endif
-                </div>
+                @if ($run === null)
+                    <span class="badge text-bg-light border">Never run for {{ $period }}</span>
+                @elseif (! $comparable)
+                    <span class="badge text-bg-secondary"><i class="bi bi-journal-check me-1"></i>Verdict recorded</span>
+                @elseif ($agrees)
+                    <span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>Matches the sales</span>
+                @else
+                    <span class="badge text-bg-warning"><i class="bi bi-exclamation-triangle me-1"></i>Does not match the sales</span>
+                @endif
             </div>
-        </div>
 
-        {{-- Upline --}}
-        <div class="col-12 col-lg-6">
-            <div class="card h-100">
-                <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <strong>Calculate Upline</strong>
-                    <span class="badge text-bg-info">₹{{ config('rewards.rates.upline') }} pool</span>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted">
-                        Seller's monthly own Sq.Ft. &times; ₹{{ config('rewards.rates.upline') }},
-                        divided equally among up to {{ config('rewards.upline.max_levels') }}
-                        active uplines. Inactive members are skipped. Target achievement does
-                        not affect this reward.
-                    </p>
-
-                    @if ($uplinePreview)
-                        <div class="row g-2 mb-3">
-                            @foreach ([
-                                ['Sellers', number_format($uplinePreview['sellers'])],
-                                ['With uplines', number_format($uplinePreview['distributing'])],
-                                ['Total pool', '₹' . number_format((float) $uplinePreview['pool'], 2)],
-                                ['Shares to pay', number_format($uplinePreview['receipts'])],
-                            ] as [$label, $value])
-                                <div class="col-6">
-                                    <div class="border rounded p-2">
-                                        <div class="stat-label">{{ $label }}</div>
-                                        <div class="fw-semibold">{{ $value }}</div>
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
-
-                        @if ((float) $uplinePreview['residual'] !== 0.0)
-                            <div class="alert alert-warning small py-2 d-flex gap-2">
-                                <i class="bi bi-info-circle mt-1"></i>
-                                <div>
-                                    Rounding residual
-                                    <strong>₹{{ number_format((float) $uplinePreview['residual'], 2) }}</strong>
-                                    — shares are rounded off individually, so the distributed
-                                    total differs from the pool by this much.
+            <div class="card-body">
+                <div class="row g-3">
+                    @if ($comparable)
+                        <div class="col-12 col-md-4">
+                            <div class="border rounded p-2 h-100">
+                                <div class="stat-label">From the sales now</div>
+                                <div class="fw-semibold fs-6">{{ $format($engine['live']) }}</div>
+                                <div class="small text-muted">
+                                    {{ number_format($engine['live_count']) }} {{ $engine['count_label'] }}
                                 </div>
                             </div>
-                        @endif
-                    @endif
-
-                    @if ($uplineRun)
-                        <div class="alert alert-success small d-flex gap-2 mb-3">
-                            <i class="bi bi-check-circle mt-1"></i>
-                            <div>
-                                Already calculated for {{ $period }} —
-                                <a href="{{ route('admin.calculations.show', $uplineRun) }}">run #{{ $uplineRun->id }}</a>.
-                            </div>
-                        </div>
-
-                        <a href="{{ route('admin.calculations.upline.ledger', ['period' => $period]) }}"
-                           class="btn btn-outline-primary">
-                            <i class="bi bi-journal-text me-1"></i>View upline reward ledger
-                        </a>
-                    @else
-                        <form method="POST" action="{{ route('admin.calculations.upline') }}">
-                            @csrf
-                            <input type="hidden" name="period" value="{{ $period }}">
-                            <button type="submit" class="btn btn-primary"
-                                    @disabled(! $uplinePreview || $uplinePreview['distributing'] === 0)
-                                    data-confirm-submit="Calculate upline rewards for {{ $period }}?">
-                                <i class="bi bi-arrow-up-circle me-1"></i>Calculate Upline for {{ $period }}
-                            </button>
-                        </form>
-
-                        @if ($uplinePreview && $uplinePreview['distributing'] === 0)
-                            <div class="form-text">
-                                No seller in this period has an eligible upline, so there is
-                                nothing to distribute.
-                            </div>
-                        @endif
-                    @endif
-                </div>
-            </div>
-        </div>
-
-        {{-- Team sales: a measurement, not a reward --}}
-        <div class="col-12 col-lg-6">
-            <div class="card h-100">
-                <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <strong>Calculate Team Sales</strong>
-                    <span class="badge text-bg-secondary">no payout</span>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted">
-                        Each leader's own approved Sq.Ft. plus every connected downline's,
-                        at any depth. This produces no reward — it is the figure the Target
-                        engine will measure against 5,000 / 10,000 / 35,000 Sq.Ft.
-                    </p>
-
-                    @if ($teamPreview)
-                        <div class="row g-2 mb-3">
-                            @foreach ([
-                                ['Leaders with team sales', number_format($teamPreview['leaders'])],
-                                ['Company Sq.Ft.', number_format((float) $teamPreview['company_sqft'], 2)],
-                                ['Largest team', number_format((float) $teamPreview['largest_team'], 2)],
-                            ] as [$label, $value])
-                                <div class="col-6">
-                                    <div class="border rounded p-2">
-                                        <div class="stat-label">{{ $label }}</div>
-                                        <div class="fw-semibold">{{ $value }}</div>
-                                    </div>
-                                </div>
-                            @endforeach
                         </div>
                     @endif
 
-                    @if ($teamRun)
-                        <div class="alert alert-success small d-flex gap-2 mb-3">
-                            <i class="bi bi-check-circle mt-1"></i>
-                            <div>
-                                Already calculated for {{ $period }} —
-                                <a href="{{ route('admin.calculations.show', $teamRun) }}">run #{{ $teamRun->id }}</a>.
+                    <div class="col-12 col-md-4">
+                        <div class="border rounded p-2 h-100 {{ $comparable && $run && ! $agrees ? 'border-warning' : '' }}">
+                            <div class="stat-label">
+                                {{ $comparable ? 'What the last run stored' : 'What this month recorded' }}
                             </div>
+                            @if ($run)
+                                <div class="fw-semibold fs-6">{{ $format($stored) }}</div>
+                                <div class="small text-muted">
+                                    {{ number_format($run->records_created) }} {{ $engine['count_label'] }} ·
+                                    <a href="{{ route('admin.calculations.show', $run) }}">run #{{ $run->id }}</a>
+                                    {{ $run->completed_at?->format('d M, H:i') }}
+                                </div>
+                            @else
+                                <div class="fw-semibold fs-6 text-muted">—</div>
+                                <div class="small text-muted">This engine has not run for {{ $period }}.</div>
+                            @endif
                         </div>
-
-                        <a href="{{ route('admin.calculations.team.report', ['period' => $period]) }}"
-                           class="btn btn-outline-primary">
-                            <i class="bi bi-people me-1"></i>View team sales report
-                        </a>
-                    @else
-                        <form method="POST" action="{{ route('admin.calculations.team') }}">
-                            @csrf
-                            <input type="hidden" name="period" value="{{ $period }}">
-                            <button type="submit" class="btn btn-primary"
-                                    @disabled(! $teamPreview || $teamPreview['leaders'] === 0)
-                                    data-confirm-submit="Calculate team sales for {{ $period }}?">
-                                <i class="bi bi-people me-1"></i>Calculate Team Sales for {{ $period }}
-                            </button>
-                        </form>
-
-                        @if ($teamPreview && $teamPreview['leaders'] === 0)
-                            <div class="form-text">No approved sales in this period.</div>
-                        @endif
-                    @endif
-                </div>
-            </div>
-        </div>
-
-        {{-- Target 1 — one calendar month --}}
-        <div class="col-12 col-lg-6">
-            <div class="card h-100">
-                <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <strong>Calculate One Month Target</strong>
-                    <span class="badge text-bg-warning">₹{{ config('rewards.rates.target') }} / Sq.Ft.</span>
-                </div>
-                <div class="card-body">
-                    <p class="small text-muted">
-                        Each member's team Sq.Ft. tested against
-                        {{ number_format((float) ($targetPreview['target_sqft'] ?? 0), 0) }} Sq.Ft.
-                        for the month. The reward is fixed at the threshold, so a team doing more
-                        is still paid on {{ number_format((float) ($targetPreview['target_sqft'] ?? 0), 0) }}.
-                        Achieved once per member, then they move to the Two Month Target.
-                    </p>
-
-                    @if ($targetPreview)
-                        <div class="row g-2 mb-3">
-                            @foreach ([
-                                ['Members measured', number_format($targetPreview['measured'])],
-                                ['Would achieve', number_format($targetPreview['achieved'])],
-                                ['Would fall short', number_format($targetPreview['missed'])],
-                                ['Reward to pay', '₹' . number_format((float) $targetPreview['total_amount'], 2)],
-                            ] as [$label, $value])
-                                <div class="col-6">
-                                    <div class="border rounded p-2">
-                                        <div class="stat-label">{{ $label }}</div>
-                                        <div class="fw-semibold">{{ $value }}</div>
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
-
-                        @if ($targetPreview['graduated'] > 0)
-                            <div class="alert alert-secondary small py-2 d-flex gap-2">
-                                <i class="bi bi-mortarboard mt-1"></i>
-                                <div>
-                                    <strong>{{ $targetPreview['graduated'] }}</strong>
-                                    {{ Str::plural('member', $targetPreview['graduated']) }} already
-                                    achieved this target and {{ $targetPreview['graduated'] === 1 ? 'is' : 'are' }}
-                                    no longer measured against it.
-                                </div>
-                            </div>
-                        @endif
-
-                        @unless ($targetPreview['team_sales_ready'])
-                            <div class="alert alert-warning small py-2 d-flex gap-2">
-                                <i class="bi bi-exclamation-triangle mt-1"></i>
-                                <div>
-                                    Team Sales has not been calculated for {{ $period }}. Targets are
-                                    judged on the figures that run produces, so run it first.
-                                </div>
-                            </div>
-                        @endunless
-                    @endif
-
-                    @if ($targetRun)
-                        <div class="alert alert-success small d-flex gap-2 mb-3">
-                            <i class="bi bi-check-circle mt-1"></i>
-                            <div>
-                                Already calculated for {{ $period }} —
-                                <a href="{{ route('admin.calculations.show', $targetRun) }}">run #{{ $targetRun->id }}</a>.
-                            </div>
-                        </div>
-
-                        <a href="{{ route('admin.targets.achieved', ['period' => $period]) }}"
-                           class="btn btn-outline-primary">
-                            <i class="bi bi-bullseye me-1"></i>View target results
-                        </a>
-                    @else
-                        <form method="POST" action="{{ route('admin.targets.run') }}">
-                            @csrf
-                            <input type="hidden" name="period" value="{{ $period }}">
-                            <button type="submit" class="btn btn-primary"
-                                    @disabled(! $targetPreview || ! $targetPreview['team_sales_ready'] || $targetPreview['measured'] === 0)
-                                    data-confirm-submit="Calculate the one month target for {{ $period }}? Members who achieve it are paid once and move to the Two Month Target.">
-                                <i class="bi bi-bullseye me-1"></i>Calculate Target for {{ $period }}
-                            </button>
-                        </form>
-
-                        @if ($targetPreview && $targetPreview['team_sales_ready'] && $targetPreview['measured'] === 0)
-                            <div class="form-text">
-                                No member is being measured this period — either there were no
-                                sales, or everyone with sales has already achieved this target.
-                            </div>
-                        @endif
-                    @endif
-                </div>
-            </div>
-        </div>
-
-        {{-- The remaining engines, shown but not yet wired. --}}
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header bg-white"><strong>Other engines</strong></div>
-                <div class="card-body">
-                    <div class="d-grid gap-2">
-                        @foreach ([
-                            ['Calculate Two Month Target', 9, '10,000 Sq.Ft. over 2 months — threshold and rate set by admin'],
-                            ['Calculate Three Month Target', 10, '35,000 Sq.Ft. over 3 months — threshold and rate set by admin'],
-                            ['Calculate Company Club', 11, 'All approved company Sq.Ft. × ₹' . config('rewards.rates.company_club')],
-                            ['Calculate All', 12, 'Runs every engine for the period in one controlled operation'],
-                        ] as [$label, $phase, $description])
-                            <div class="border rounded p-2 d-flex justify-content-between align-items-center gap-2">
-                                <div>
-                                    <div class="fw-semibold small">{{ $label }}</div>
-                                    <div class="text-muted" style="font-size: .78rem;">{{ $description }}</div>
-                                </div>
-                                <span class="badge text-bg-light border text-nowrap">Phase {{ $phase }}</span>
-                            </div>
-                        @endforeach
                     </div>
 
-                    <p class="small text-muted mt-3 mb-0">
-                        The four calculations are independent engines and are never derived
-                        from one another.
-                    </p>
+                    <div class="col-12 {{ $comparable ? 'col-md-4' : 'col-md-8' }} d-flex align-items-start">
+                        <a href="{{ $engine['report'] }}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-journal-text me-1"></i>{{ $engine['report_label'] }}
+                        </a>
+                    </div>
                 </div>
+
+                @if ($engine['note'])
+                    <div class="small text-muted mt-3 mb-0">{{ $engine['note'] }}</div>
+                @endif
             </div>
+        </div>
+    @endforeach
+
+    {{-- Company Club is deliberately NOT one of the engine cards above.
+         Those four are rebuilt together by the Rebuild button and compared
+         against the live sales. Company Club has its own eligibility rule
+         (active sellers only), its own preview-then-commit workflow and its own
+         history, so it lives in its own module and is linked to rather than
+         driven from here. --}}
+    <div class="card mb-3">
+        <div class="card-header bg-white"><strong>Company Club</strong></div>
+        <div class="card-body">
+            <p class="small text-muted mb-2">
+                A separate module with its own screens. Its pool is the month's eligible
+                Sq.Ft. &times; &#8377;{{ config('rewards.rates.company_club') }}, shared equally
+                between the unique active members within
+                {{ config('rewards.company_club.max_upline_levels') }} active sponsor levels
+                of a seller. It counts <strong>active sellers only</strong>, so its total
+                Sq.Ft. can legitimately differ from the Direct total above.
+            </p>
+
+            <a href="{{ route('admin.company-club.overview', ['period' => $period]) }}"
+               class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-award me-1"></i>Open Company Club
+            </a>
+
+            <p class="small text-muted mt-3 mb-0">
+                The reward calculations are independent engines and are never derived
+                from one another. The one exception is ordering: the targets are judged
+                on the figures Team Sales produces, which is why rebuilding runs all four
+                together rather than offering them one at a time.
+            </p>
         </div>
     </div>
 
-    {{-- Run history --}}
-    <div class="card mt-3">
-        <div class="card-header bg-white"><strong>Recent calculation runs</strong></div>
+    {{-- Single-engine runs. Present, but behind a disclosure: reaching for one
+         of these instead of Rebuild is how a month ends up inconsistent. --}}
+    <details class="card mb-3">
+        <summary class="card-header bg-white" style="cursor: pointer;">
+            <strong>Run one engine on its own</strong>
+            <span class="text-muted small ms-2">— rarely what you want</span>
+        </summary>
+        <div class="card-body">
+            <p class="small text-muted">
+                These run a single engine for {{ $period }} and leave the others
+                untouched. A month is one picture: running Team Sales without re-running
+                the target after it leaves this month's targets judged against an older
+                rollup. Prefer <strong>Rebuild {{ $period }}</strong> above.
+            </p>
+
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (array_values(array_filter([
+                    ['Direct', 'admin.calculations.direct'],
+                    // Hidden engines keep running under Rebuild; they just get
+                    // no button of their own, because there is no report to
+                    // check the result against.
+                    App\Enums\RewardType::Upline->isVisible() ? ['Upline', 'admin.calculations.upline'] : null,
+                    ['Team Sales', 'admin.calculations.team'],
+                ])) as [$label, $action])
+                    <form method="POST" action="{{ route($action) }}">
+                        @csrf
+                        <input type="hidden" name="period" value="{{ $period }}">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary"
+                                @disabled($status && $status['locked'])
+                                data-confirm-submit="Run {{ $label }} alone for {{ $period }}, leaving the other engines as they are?">
+                            {{ $label }}
+                        </button>
+                    </form>
+                @endforeach
+            </div>
+        </div>
+    </details>
+
+    {{-- Run history. Engines the operator has no report for are omitted, so
+         "hidden" means the same thing on every screen. Their runs still happen
+         and are still recorded — the reconciliation screen accounts for them. --}}
+    <div class="card">
+        @if (! empty($hiddenEngines))
+            <div class="card-header bg-white border-bottom-0 pb-0">
+                {{-- The engine is not NAMED here: naming it would put the very
+                     word back on the screen it was removed from. The link goes
+                     where its figures are accounted for in full. --}}
+                <p class="small text-muted mb-0">
+                    <i class="bi bi-eye-slash me-1"></i>
+                    {{ count($hiddenEngines) === 1 ? 'One engine is' : count($hiddenEngines).' engines are' }}
+                    calculated with every rebuild but not reported here. Their figures are accounted
+                    for on the
+                    <a href="{{ route('admin.ledger.reconciliation', ['period' => $period]) }}">reconciliation screen</a>.
+                </p>
+            </div>
+        @endif
+
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <strong>Recent calculation runs</strong>
+            <span class="text-muted small">
+                Superseded runs are kept: they record who calculated what, and when.
+            </span>
+        </div>
         <div class="table-responsive">
             <table class="table table-sm table-hover align-middle mb-0">
                 <thead class="table-light">
@@ -400,7 +357,9 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="text-center text-muted py-4">No calculation runs yet.</td>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                No calculation has run yet. Entering a sale will produce the first.
+                            </td>
                         </tr>
                     @endforelse
                 </tbody>

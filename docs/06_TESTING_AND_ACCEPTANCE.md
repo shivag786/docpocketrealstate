@@ -20,7 +20,7 @@ Target 1:
 - 4,999 → fail
 - 5,000 → pass
 - 5,001 → pass
-Target reward = 150,000 after achievement.
+Target prize = 50,000 after achievement (Target 2 = 200,000, Target 3 = 700,000).
 Team must include own + connected downline.
 
 ## Target 2

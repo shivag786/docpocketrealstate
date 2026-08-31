@@ -10,6 +10,20 @@
     $member ??= null;
     $sponsor ??= $member?->sponsor;
     $canChangeSponsor ??= true;
+    $bloodGroups ??= \App\Enums\BloodGroup::options();
+    $designations ??= \App\Models\CompanySetting::current()->designationOptions();
+    $defaultDesignation = config('company.designations.default', 'Sales Advisor');
+
+    /**
+     * Leaving the sponsor blank places the member directly under the Company
+     * Club, which is a system entity with no member row. "Root member" was the
+     * old wording for the same thing.
+     *
+     * Resolved here rather than passed in, because this partial is included by
+     * both create and edit and must not depend on either remembering to supply
+     * it.
+     */
+    $clubName = \App\Models\CompanyClubSetting::current()->name();
 @endphp
 
 <div class="row g-3">
@@ -49,6 +63,43 @@
                                value="{{ old('email', $member?->email) }}"
                                class="form-control @error('email') is-invalid @enderror">
                         @error('email')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label for="designation" class="form-label required-mark">Designation</label>
+                        <select id="designation"
+                                name="designation"
+                                class="form-select @error('designation') is-invalid @enderror"
+                                required>
+                            @foreach ($designations as $option)
+                                <option value="{{ $option }}"
+                                    @selected(old('designation', $member?->designation ?? $defaultDesignation) === $option)>
+                                    {{ $option }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('designation')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <div class="form-text">
+                            Printed on the welcome letter and the ID card. The list is
+                            maintained under Administration &rsaquo; Settings.
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label for="blood_group" class="form-label">Blood group <span class="text-muted small">(optional)</span></label>
+                        <select id="blood_group"
+                                name="blood_group"
+                                class="form-select @error('blood_group') is-invalid @enderror">
+                            <option value="">&mdash; Not recorded &mdash;</option>
+                            @foreach ($bloodGroups as $value => $label)
+                                <option value="{{ $value }}"
+                                    @selected(old('blood_group', $member?->blood_group?->value) === $value)>
+                                    {{ $label }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('blood_group')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <div class="form-text">Leave blank rather than guessing.</div>
                     </div>
 
                     <div class="col-12">
@@ -101,7 +152,7 @@
                         <i class="bi bi-lock mt-1"></i>
                         <div>
                             The sponsor is locked because sales have been recorded against
-                            this member. Changing it would alter upline rewards that were
+                            this member. Changing it would alter rewards that were
                             already calculated.
                         </div>
                     </div>
@@ -131,7 +182,7 @@
                                    data-sponsor-search>
                         </div>
                         <div class="form-text">
-                            Leave empty to create a root member with no sponsor.
+                            Leave empty to place this member directly under {{ $clubName }}.
                         </div>
                     </div>
 
@@ -159,7 +210,8 @@
 
                     <div class="mt-2 {{ $sponsor ? 'd-none' : '' }}" data-sponsor-empty>
                         <div class="border rounded border-dashed p-2 text-center text-muted small">
-                            No sponsor selected &mdash; this will be a root member.
+                            No sponsor selected &mdash; this member will sit directly under
+                            <strong>{{ $clubName }}</strong>.
                         </div>
                     </div>
                 </div>

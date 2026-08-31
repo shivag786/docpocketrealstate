@@ -7,10 +7,14 @@ use App\Http\Controllers\Concerns\ResolvesReportFilters;
 use App\Http\Controllers\Controller;
 use App\Models\Member;
 use App\Models\RegistrySale;
+use App\Support\Export\TableExport;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Direct Sale reward report.
@@ -30,6 +34,12 @@ use Illuminate\View\View;
 class DirectSaleController extends Controller
 {
     use ResolvesReportFilters;
+
+    /**
+     * A hard ceiling on one download. An export is assembled in memory, and a
+     * request for every sale ever entered would take the process down with it.
+     */
+    private const EXPORT_LIMIT = 5000;
 
     private const SORTABLE = [
         'date' => 'registry_date',
@@ -73,6 +83,86 @@ class DirectSaleController extends Controller
                 ->get(['id', 'member_code', 'name']),
             'sortOptions' => array_keys(self::SORTABLE),
         ]);
+    }
+
+    /**
+     * The same table, as a file.
+     *
+     * It runs the page's OWN filters and the page's OWN query — only the paging
+     * is replaced by a ceiling — so a download is the table the operator is
+     * looking at, not a second interpretation of it.
+     */
+    public function export(Request $request, string $format): StreamedResponse|Response
+    {
+        if (! TableExport::supports($format)) {
+            throw new NotFoundHttpException('Unknown export format.');
+        }
+
+        $filters = $this->filters($request);
+        $rate = RewardType::Direct->rate();
+
+        $sales = $this->query($filters)
+            ->with(['member:id,member_code,name,mobile', 'property:id,property_code', 'project:id,name'])
+            ->select('registry_sales.*')
+            ->limit(self::EXPORT_LIMIT)
+            ->get();
+
+        $rows = $sales->map(fn (RegistrySale $sale) => [
+            $sale->registry_date->format('d M Y'),
+            $sale->member?->member_code ?? '',
+            $sale->member?->name ?? '',
+            $sale->member?->mobile ?? '',
+            $sale->project?->name ?? '-',
+            $sale->property?->property_code ?? '-',
+            number_format((float) $sale->sqft, 2, '.', ''),
+            number_format((float) $rate, 2, '.', ''),
+            number_format((float) Money::multiply((string) $sale->sqft, $rate), 2, '.', ''),
+            $sale->registry_reference ?? '-',
+        ])->all();
+
+        $window = $this->windowLabel($filters);
+
+        return TableExport::make(
+            title: 'Direct Sale Report',
+            subtitle: TableExport::context($window, [
+                'Rate' => '₹'.number_format((float) $rate, 2).' per Sq.Ft.',
+                'Sales' => count($rows),
+            ]),
+            headings: [
+                'Registry date', 'Member code', 'Member name', 'Mobile',
+                'Project', 'Property', 'Sq.Ft.', 'Rate', 'Direct reward', 'Registry ref.',
+            ],
+            rows: $rows,
+            weights: [1.1, 1.0, 1.7, 1.1, 1.3, 1.0, 0.9, 0.7, 1.1, 1.1],
+        )->download($format, TableExport::filename('direct-sales', $window));
+    }
+
+    /**
+     * How the export describes its date window.
+     *
+     * A window that sits inside one calendar month is named by that month —
+     * "2026-07" — because that is what an operator means by "the period". Any
+     * other window is spelled out in full rather than rounded to a month it
+     * does not actually cover.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    private function windowLabel(array $filters): string
+    {
+        $from = $filters['from'] ?? null;
+        $to = $filters['to'] ?? null;
+
+        if ($from === null && $to === null) {
+            return 'all dates';
+        }
+
+        if ($from !== null && $to !== null) {
+            return substr($from, 0, 7) === substr($to, 0, 7)
+                ? substr($from, 0, 7)
+                : $from.' to '.$to;
+        }
+
+        return $from === null ? 'up to '.$to : 'from '.$from;
     }
 
     /**

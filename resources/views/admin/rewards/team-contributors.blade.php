@@ -4,7 +4,7 @@
 @section('page-title', 'Team sales — ' . $member->name)
 
 @section('breadcrumbs')
-    <li class="breadcrumb-item"><a href="{{ route('admin.calculations.team.report', ['period' => $period]) }}">Team Sales</a></li>
+    <li class="breadcrumb-item"><a href="{{ route('admin.rewards.team-sales', ['period' => $period]) }}">Team Sales</a></li>
     <li class="breadcrumb-item active" aria-current="page">{{ $member->member_code }}</li>
 @endsection
 
@@ -93,7 +93,7 @@
                                 @endif
                             </td>
                             <td>
-                                <a href="{{ route('admin.calculations.team.contributors', [$contributor->member_id, 'period' => $period]) }}"
+                                <a href="{{ route('admin.rewards.team-sales.contributors', [$contributor->member_id, 'period' => $period]) }}"
                                    class="fw-semibold text-decoration-none">
                                     {{ $contributor->member_code }}
                                 </a>
@@ -132,6 +132,6 @@
     <p class="small text-muted mt-2 mb-0">
         Depth is how many sponsor links below {{ $member->member_code }} the member sits.
         There is no depth limit on team sales — the 5-level cap applies only to the
-        upline reward, which is a separate rule.
+        Company Club walk, which is a separate rule.
     </p>
 @endsection

@@ -19,6 +19,6 @@ Work strictly phase-by-phase. Complete and test one phase before starting the ne
 - Direct Sale: own approved Sq.Ft. × ₹40
 - Upline: seller's monthly own Sq.Ft. × ₹50, equally divided among actual eligible uplines, maximum 5
 - Team Target: own + all connected downline sales; target reward after achievement
-- Company Club: all company approved monthly sales × ₹30
+- Company Club: eligible monthly sales (ACTIVE sellers) × ₹50, one pool, shared equally among unique active members within 5 active upline levels of a seller
 
 After every task, update `PROJECT_STATE.md` and `CHANGELOG.md`.

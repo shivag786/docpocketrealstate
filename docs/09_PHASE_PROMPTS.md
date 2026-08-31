@@ -31,7 +31,7 @@ Implement only Target 2: 10,000 Sq.Ft./2 months with cumulative monthly progress
 Implement only Target 3: 35,000 Sq.Ft./3 months with cumulative progress. Test. Update state/changelog. Stop.
 
 ## Phase 11
-Implement only Company Club: all approved company sales × ₹30, with detailed breakdown and snapshot. Test reconciliation. Update state/changelog. Stop.
+Implement only Company Club per docs/company-club/: eligible (ACTIVE seller) sales × ₹50 as ONE monthly pool, shared equally among unique active members within 5 active upline levels of a seller. Preview before committing; never overwrite a previous run. Test reconciliation. Update state/changelog. Stop.
 
 ## Phase 12
 Implement Calculation Center and controlled calculation runs. Prevent duplicate financial generation. Use transactions. Test. Update state/changelog. Stop.

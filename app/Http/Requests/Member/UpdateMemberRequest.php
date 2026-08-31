@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Member;
 
+use App\Enums\BloodGroup;
 use App\Enums\MemberStatus;
 use App\Http\Requests\BaseFormRequest;
+use App\Models\CompanySetting;
 use App\Models\Member;
 use App\Rules\ValidSponsor;
 use Illuminate\Validation\Rule;
@@ -27,6 +29,20 @@ class UpdateMemberRequest extends BaseFormRequest
             'email' => [
                 'nullable', 'email', 'max:255',
                 Rule::unique('members', 'email')->ignore($member->id),
+            ],
+            'blood_group' => ['nullable', new Enum(BloodGroup::class)],
+
+            // The member's CURRENT designation is always permitted, even if an
+            // admin has since removed that rank from the list. Otherwise every
+            // unrelated edit — a corrected mobile number — would be blocked by
+            // a field the operator never touched, on a member who was issued a
+            // printed card under the old rank.
+            'designation' => [
+                'required', 'string', 'max:100',
+                Rule::in([
+                    ...CompanySetting::current()->designationOptions(),
+                    ...array_filter([$member->designation]),
+                ]),
             ],
             'address' => ['nullable', 'string', 'max:1000'],
 
@@ -78,6 +94,7 @@ class UpdateMemberRequest extends BaseFormRequest
         return [
             'sponsor_id' => 'sponsor',
             'joining_date' => 'joining date',
+            'blood_group' => 'blood group',
         ];
     }
 
@@ -86,6 +103,13 @@ class UpdateMemberRequest extends BaseFormRequest
         $this->merge([
             'sponsor_id' => $this->input('sponsor_id') ?: null,
             'email' => $this->input('email') ?: null,
+            'blood_group' => $this->input('blood_group') ?: null,
+            // An update that does not mention the designation keeps the one
+            // the member already holds. Every member holds one from the day
+            // they join, so there is no such thing as clearing it — and a
+            // partial update correcting a mobile number must not be rejected
+            // over a field it never touched.
+            'designation' => $this->input('designation') ?: $this->member()->designation,
         ]);
     }
 

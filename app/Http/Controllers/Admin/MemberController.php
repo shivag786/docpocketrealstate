@@ -2,21 +2,23 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\BloodGroup;
 use App\Enums\MemberStatus;
 use App\Enums\RewardType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Member\StoreMemberRequest;
 use App\Http\Requests\Member\UpdateMemberRequest;
+use App\Models\CompanySetting;
 use App\Models\Member;
 use App\Models\RegistrySale;
 use App\Models\RewardLedger;
 use App\Models\TargetCalculation;
 use App\Models\TeamCalculation;
-use App\Support\Money;
 use App\Services\DirectRewardService;
 use App\Services\MemberService;
 use App\Services\MemberTreeService;
 use App\Services\UplineRewardService;
+use App\Support\Money;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -57,6 +59,8 @@ class MemberController extends Controller
     {
         return view('admin.members.create', [
             'statuses' => MemberStatus::options(),
+            'bloodGroups' => BloodGroup::options(),
+            'designations' => CompanySetting::current()->designationOptions(),
             'sponsor' => $request->filled('sponsor_id')
                 ? Member::find($request->query('sponsor_id'))
                 : null,
@@ -67,9 +71,13 @@ class MemberController extends Controller
     {
         $member = $this->members->create($request->validated());
 
+        // `just_created` drives the print prompt on the profile. Flashed rather
+        // than derived from a timestamp: an admin who reloads the page a minute
+        // later is no longer mid-registration, and the prompt should be gone.
         return redirect()
             ->route('admin.members.show', $member)
-            ->with('success', "Member {$member->member_code} ({$member->name}) was created.");
+            ->with('success', "Member {$member->member_code} ({$member->name}) was created.")
+            ->with('just_created', true);
     }
 
     public function show(Member $member, MemberTreeService $tree): View
@@ -104,6 +112,17 @@ class MemberController extends Controller
         return view('admin.members.edit', [
             'member' => $member,
             'statuses' => MemberStatus::options(),
+            'bloodGroups' => BloodGroup::options(),
+            // The member's own designation is appended when an admin has since
+            // removed that rank from the list, so the select can still show
+            // what they actually hold. UpdateMemberRequest permits it for the
+            // same reason.
+            'designations' => collect(CompanySetting::current()->designationOptions())
+                ->push($member->designation)
+                ->filter()
+                ->unique()
+                ->values()
+                ->all(),
             'canChangeSponsor' => $member->canChangeSponsor(),
         ]);
     }

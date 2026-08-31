@@ -34,15 +34,20 @@
                     <form method="POST" action="{{ route('login') }}" novalidate>
                         @csrf
 
+                        {{-- Pre-filled from config('company.login.default_email')
+                             so a single-operator install only types a password.
+                             `old()` still wins after a failed attempt, so a
+                             corrected address is not thrown away. Editable, not
+                             readonly: a second operator has to be able to sign
+                             in on the same machine. --}}
                         <div class="mb-3">
                             <label for="email" class="form-label required-mark">Email address</label>
                             <input type="email"
                                    id="email"
                                    name="email"
-                                   value="{{ old('email') }}"
+                                   value="{{ old('email', config('company.login.default_email')) }}"
                                    class="form-control @error('email') is-invalid @enderror"
                                    required
-                                   autofocus
                                    autocomplete="username">
                             @error('email')
                                 <div class="invalid-feedback">{{ $message }}</div>
@@ -51,15 +56,33 @@
 
                         <div class="mb-3">
                             <label for="password" class="form-label required-mark">Password</label>
-                            <input type="password"
-                                   id="password"
-                                   name="password"
-                                   class="form-control @error('password') is-invalid @enderror"
-                                   required
-                                   autocomplete="current-password">
-                            @error('password')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
+
+                            {{-- The invalid-feedback must sit INSIDE the
+                                 input-group, or Bootstrap will not show it:
+                                 it only reveals a sibling of the .is-invalid
+                                 control, and the button would otherwise be in
+                                 the way. --}}
+                            <div class="input-group">
+                                <input type="password"
+                                       id="password"
+                                       name="password"
+                                       class="form-control @error('password') is-invalid @enderror"
+                                       required
+                                       autofocus
+                                       autocomplete="current-password">
+
+                                <button type="button"
+                                        class="btn btn-outline-secondary"
+                                        data-password-toggle="password"
+                                        aria-label="Show password"
+                                        title="Show password">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+
+                                @error('password')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
                         </div>
 
                         <div class="form-check mb-4">

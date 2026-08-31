@@ -392,8 +392,8 @@ class RecalculationTest extends TestCase
         $this->assertSame(2, $summary['total']);
         $this->assertSame(1, $summary['paid']);
         $this->assertSame(1, $summary['unpaid']);
-        $this->assertSame('150000.00', $summary['paid_amount']);
-        $this->assertSame('150000.00', $summary['unpaid_amount']);
+        $this->assertSame('50000.00', $summary['paid_amount']);
+        $this->assertSame('50000.00', $summary['unpaid_amount']);
     }
 
     // -----------------------------------------------------------------

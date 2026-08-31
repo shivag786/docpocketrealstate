@@ -1,5 +1,11 @@
 @extends('layouts.admin')
 
+@php
+    // A member with no sponsor sits directly under the Company Club, which is a
+    // system entity with no member row. "Root" was the old wording for it.
+    $clubName = \App\Models\CompanyClubSetting::current()->name();
+@endphp
+
 @section('title', 'Sponsor Tree')
 @section('page-title', 'Sponsor Tree')
 
@@ -39,13 +45,13 @@
 
                 <div class="col-6 col-lg-5 d-flex flex-wrap gap-2 justify-content-lg-end">
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-tree-expand>
-                        <i class="bi bi-arrows-expand me-1"></i>Expand loaded
+                        <i class="bi bi-arrows-expand me-1"></i>Expand next level
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-tree-collapse>
                         <i class="bi bi-arrows-collapse me-1"></i>Collapse all
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary d-none" data-tree-reset>
-                        <i class="bi bi-house me-1"></i>Back to roots
+                        <i class="bi bi-house me-1"></i>Back to {{ $clubName }}
                     </button>
                 </div>
             </div>
@@ -69,7 +75,7 @@
             <strong>Network</strong>
             <span class="small text-muted">
                 {{ number_format($memberCount) }} {{ Str::plural('member', $memberCount) }},
-                {{ number_format($rootCount) }} {{ Str::plural('root', $rootCount) }}
+                {{ number_format($rootCount) }} directly under {{ $clubName }}
             </span>
         </div>
 
@@ -82,11 +88,13 @@
                 </div>
             @else
                 {{--
-                    Only the roots are fetched on load. Each expansion requests
+                    Only the members directly under {{ $clubName }} are fetched on load.
+                    Each expansion requests
                     exactly one more level, so the whole network is never rendered
                     at once (docs/04_UI_UX_SPECIFICATION.md).
                 --}}
                 <div data-member-tree
+                     data-club-name="{{ $clubName }}"
                      data-children-url="{{ route('admin.tree.children') }}"
                      data-search-url="{{ route('admin.tree.search') }}"
                      data-focus-url="{{ url('admin/tree/focus') }}"

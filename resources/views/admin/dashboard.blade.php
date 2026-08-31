@@ -17,17 +17,19 @@
 @endsection
 
 @php
+    use App\Enums\RewardType;
+
     $rateDirect = config('rewards.rates.direct');
-    $combined = bcadd(
-        bcadd($rewards['direct']['total'], $rewards['upline']['total'], 2),
-        $rewards['target']['total'],
-        2
-    );
-    $outstanding = bcadd(
-        bcadd($rewards['direct']['unpaid'], $rewards['upline']['unpaid'], 2),
-        $rewards['target']['unpaid'],
-        2
-    );
+
+    // Summed over whatever engines are on show rather than three hard-coded
+    // keys: a hidden engine leaves no key, and the headline figure must never
+    // include money the cards below it do not account for.
+    $combined = \App\Support\Money::sum(array_column($rewards, 'total'));
+    $outstanding = \App\Support\Money::sum(array_column($rewards, 'unpaid'));
+    $engineNames = implode(' + ', array_map(
+        fn (string $key) => strtolower(RewardType::from($key)->label()),
+        array_keys($rewards),
+    ));
 @endphp
 
 @section('content')
@@ -75,7 +77,7 @@
                 <div class="row g-0 h-100">
                     @foreach ([
                         ['Today', number_format($sales['today_count']), number_format((float) $sales['today_sqft'], 2) . ' Sq.Ft. entered', 'bi-calendar-check'],
-                        ['All rewards', '₹' . number_format((float) $combined, 2), 'direct + upline + target, all months', 'bi-safe'],
+                        ['All rewards', '₹' . number_format((float) $combined, 2), $engineNames . ', all months', 'bi-safe'],
                         ['Outstanding', '₹' . number_format((float) $outstanding, 2), 'calculated but not yet marked paid', 'bi-hourglass-split'],
                     ] as [$label, $value, $hint, $icon])
                         <div class="col-12 col-sm-4 hero-cell">
@@ -132,24 +134,33 @@
 
     {{-- Reward engines --------------------------------------------------- --}}
     <div class="row g-3 mb-3">
-        @foreach ([
-            [
-                'Direct Reward', $rewards['direct'], 'bi-cash-coin', 'primary',
-                'Own approved Sq.Ft. × ₹' . config('rewards.rates.direct'),
-                route('admin.rewards.direct-sales', ['range' => 'month']),
-            ],
-            [
-                'Upline Reward', $rewards['upline'], 'bi-arrow-up-circle', 'info',
-                "Seller's monthly Sq.Ft. × ₹" . config('rewards.rates.upline') . ', split up to ' . config('rewards.upline.max_levels'),
-                route('admin.calculations.upline.ledger', ['period' => now()->format('Y-m')]),
-            ],
-            [
-                'Target Reward', $rewards['target'], 'bi-bullseye', 'warning',
-                number_format((float) config('rewards.targets.1.sqft')) . ' Sq.Ft. team in a month → ₹' . number_format((float) config('rewards.targets.1.reward')),
-                route('admin.targets.achieved', ['period' => now()->format('Y-m')]),
-            ],
-        ] as [$label, $data, $icon, $tone, $basis, $url])
-            <div class="col-12 col-lg-4">
+        @php
+            // Keyed by reward type so a hidden engine simply has no card. The
+            // column width follows the count, so two cards still fill the row.
+            $engineCards = array_intersect_key([
+                'direct' => [
+                    'Direct Reward', 'bi-cash-coin', 'primary',
+                    'Own approved Sq.Ft. × ₹' . config('rewards.rates.direct'),
+                    route('admin.rewards.direct-sales', ['range' => 'month']),
+                ],
+                'upline' => [
+                    'Upline Reward', 'bi-arrow-up-circle', 'info',
+                    "Seller's monthly Sq.Ft. × ₹" . config('rewards.rates.upline') . ', split up to ' . config('rewards.upline.max_levels'),
+                    route('admin.rewards.upline', ['period' => now()->format('Y-m')]),
+                ],
+                'target' => [
+                    'Target Reward', 'bi-bullseye', 'warning',
+                    number_format((float) config('rewards.targets.1.sqft')) . ' Sq.Ft. team in a month → ₹' . number_format((float) config('rewards.targets.1.reward')),
+                    route('admin.targets.achieved', ['period' => now()->format('Y-m')]),
+                ],
+            ], $rewards);
+
+            $engineColumn = count($engineCards) >= 3 ? 'col-lg-4' : 'col-lg-6';
+        @endphp
+
+        @foreach ($engineCards as $key => [$label, $icon, $tone, $basis, $url])
+            @php $data = $rewards[$key]; @endphp
+            <div class="col-12 {{ $engineColumn }}">
                 <div class="card engine-card h-100 tone-{{ $tone }}">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">

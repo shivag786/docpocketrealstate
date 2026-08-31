@@ -35,7 +35,7 @@ For every Team Leader: own + all connected downline approved sales. Each member'
 **Exit:** Rahul/A/B/C sample totals reconcile.
 
 ## Phase 8 — Target 1
-5,000 Sq.Ft. / 1 month. Target sales = own + complete connected team. On achievement: `5,000 × ₹30 = ₹150,000`.
+5,000 Sq.Ft. / 1 month. Target sales = own + complete connected team. On achievement: a fixed prize of `₹50,000` (client-confirmed 2026-08-25).
 **Exit:** 4,999 fails; 5,000/5,001 pass.
 
 ## Phase 9 — Target 2

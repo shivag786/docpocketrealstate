@@ -38,6 +38,13 @@ class StoreRegistrySaleRequest extends BaseFormRequest
             'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')->whereNull('deleted_at')],
             'property_id' => ['nullable', 'integer', Rule::exists('properties', 'id')->whereNull('deleted_at')],
 
+            // Free text by design (see the block/plot migration): a project
+            // gains blocks as it is laid out, and a sale must never be blocked
+            // because nobody has pre-registered one. Constrained only in shape,
+            // so a stray paste cannot reach the column.
+            'block_name' => ['nullable', 'string', 'max:100', 'regex:/^[\pL\pN\s\-\/.,#()]+$/u'],
+            'plot_number' => ['nullable', 'string', 'max:50', 'regex:/^[\pL\pN\s\-\/.,#()]+$/u'],
+
             // Unique when supplied. MySQL permits many NULLs in a unique index,
             // so omitting it is allowed while duplicates of a real number are not.
             'registry_reference' => [
@@ -83,6 +90,14 @@ class StoreRegistrySaleRequest extends BaseFormRequest
                 }
             }
 
+            // A block or a plot number without a project cannot be resolved to
+            // anywhere on the ground — "Block C, Plot 118" means nothing until
+            // you know which project it is in. Same rule the property already
+            // follows, for the same reason.
+            if (($this->input('block_name') || $this->input('plot_number')) && ! $projectId) {
+                $validator->errors()->add('project_id', 'Select the project this plot belongs to.');
+            }
+
             $member = Member::find($this->input('member_id'));
 
             if ($member && $member->status !== MemberStatus::Active) {
@@ -107,6 +122,8 @@ class StoreRegistrySaleRequest extends BaseFormRequest
             'sqft.decimal' => 'Sq.Ft. may have at most 2 decimal places.',
             'sqft.lte' => 'That Sq.Ft. figure is too large. Please check it.',
             'registry_reference.unique' => 'A sale with this registry number has already been recorded.',
+            'block_name.regex' => 'The block name may only contain letters, numbers, spaces and - / . , # ( ) characters.',
+            'plot_number.regex' => 'The plot number may only contain letters, numbers, spaces and - / . , # ( ) characters.',
             'registry_date.before_or_equal' => 'The registry date cannot be in the future.',
             'sale_date.before_or_equal' => 'The sale date cannot be after the registry date.',
         ];
@@ -121,6 +138,8 @@ class StoreRegistrySaleRequest extends BaseFormRequest
             'member_id' => 'member',
             'project_id' => 'project',
             'property_id' => 'property',
+            'block_name' => 'block name',
+            'plot_number' => 'plot number',
             'registry_reference' => 'registry number',
             'registry_date' => 'registry date',
             'sqft' => 'Sq.Ft.',
@@ -135,6 +154,8 @@ class StoreRegistrySaleRequest extends BaseFormRequest
             'project_id' => $this->input('project_id') ?: null,
             'property_id' => $this->input('property_id') ?: null,
             'registry_reference' => trim((string) $this->input('registry_reference')) ?: null,
+            'block_name' => trim((string) $this->input('block_name')) ?: null,
+            'plot_number' => trim((string) $this->input('plot_number')) ?: null,
             'registry_date' => $this->input('registry_date') ?: null,
             'sale_date' => $this->input('sale_date') ?: null,
             'sqft' => is_string($this->input('sqft'))

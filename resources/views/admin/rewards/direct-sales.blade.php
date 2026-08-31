@@ -9,6 +9,21 @@
 @endsection
 
 @section('page-actions')
+    {{-- The download carries the filters currently applied, so the file is
+         this table rather than a fresh unfiltered one. --}}
+    @include('admin.partials.export-menu', [
+        'route' => 'admin.rewards.direct-sales.export',
+        'params' => array_filter([
+            'range' => $filters['preset'],
+            'from' => $filters['from'],
+            'to' => $filters['to'],
+            'member_id' => $filters['member_id'],
+            'sort' => $filters['sort'],
+            'direction' => $filters['direction'],
+        ]),
+        'count' => $saleCount,
+    ])
+
     <a href="{{ route('admin.sales.create') }}" class="btn btn-sm btn-primary">
         <i class="bi bi-plus-lg me-1"></i>Enter sale
     </a>
@@ -281,7 +296,7 @@
 
     <p class="small text-muted mt-2 mb-0">
         Direct reward is each member's own approved sale Sq.Ft. × ₹{{ number_format((float) $rate, 0) }}.
-        Downline sales are not counted here — those belong to the Upline and Target
+        Downline sales are not counted here — those belong to the Team Sales and Target
         engines. Target achievement never affects this reward.
     </p>
 @endsection

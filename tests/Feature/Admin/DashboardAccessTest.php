@@ -6,6 +6,8 @@ use App\Enums\UserStatus;
 use App\Models\Member;
 use App\Models\RegistrySale;
 use App\Models\User;
+use App\Services\DirectRewardService;
+use App\Services\UplineRewardService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -62,16 +64,44 @@ class DashboardAccessTest extends TestCase
     }
 
     #[Test]
-    public function the_dashboard_names_the_three_live_reward_engines(): void
+    public function the_dashboard_names_the_visible_reward_engines(): void
     {
+        // Upline was named here too until it was hidden on 2026-08-27. The
+        // engine still runs and still pays; the dashboard no longer reports a
+        // figure for a reward with no screen behind it.
         $this->actingAs(User::factory()->admin()->create())
             ->get(route('admin.dashboard'))
             ->assertSee('Direct Reward')
-            ->assertSee('Upline Reward')
             ->assertSee('Target Reward')
+            ->assertDontSee('Upline Reward')
             // Each engine states its basis, so a rate is never an unexplained number.
-            ->assertSee('Own approved Sq.Ft. × ₹'.config('rewards.rates.direct'), false)
-            ->assertSee('₹'.config('rewards.rates.upline'), false);
+            ->assertSee('Own approved Sq.Ft. × ₹'.config('rewards.rates.direct'), false);
+    }
+
+    #[Test]
+    public function the_headline_total_never_counts_a_hidden_engine(): void
+    {
+        // The "All rewards" figure is summed over the cards on show. If it kept
+        // counting Upline the dashboard would report money that nothing below
+        // it accounts for, which is worse than either showing or hiding it.
+        $member = Member::factory()->create();
+        $sponsor = Member::factory()->create();
+        $member->update(['sponsor_id' => $sponsor->id]);
+
+        $period = now()->subMonth()->format('Y-m');
+        RegistrySale::factory()->forMember($member)->sqft('1000.00')
+            ->create(['registry_date' => $period.'-15', 'sale_date' => $period.'-15']);
+
+        $admin = User::factory()->admin()->create();
+        app(DirectRewardService::class)->calculate($period, $admin);
+        app(UplineRewardService::class)->calculate($period, $admin);
+
+        // Direct ₹40,000 is shown; the ₹50,000 upline pool is written but not counted.
+        $this->actingAs($admin)
+            ->get(route('admin.dashboard'))
+            ->assertOk()
+            ->assertSee('₹40,000.00')
+            ->assertSee('direct sale + team target, all months');
     }
 
     #[Test]
@@ -119,11 +149,15 @@ class DashboardAccessTest extends TestCase
     {
         // The counterpart to the test above: hiding the phase on a delivered
         // feature must not turn an unbuilt menu item into a dead end.
+        //
+        // This has pointed at Company Club (Phase 11) and then Reward Ledger
+        // (Phase 13) as each was delivered. Reports is now the nearest unbuilt
+        // screen and takes over the job of proving the rule still holds.
         $this->actingAs(User::factory()->admin()->create())
             ->get(route('admin.dashboard'))
             ->assertOk()
-            ->assertSee('Company Club')
-            ->assertSee('Delivered in Phase 11', false);
+            ->assertSee('Reports')
+            ->assertSee('Delivered in Phase 14', false);
     }
 
     #[Test]

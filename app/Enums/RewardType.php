@@ -50,6 +50,43 @@ enum RewardType: string
         };
     }
 
+    /**
+     * Whether this engine appears in the back office at all.
+     *
+     * A HIDDEN ENGINE IS STILL A RUNNING ENGINE. `config('rewards.visibility')`
+     * controls what an operator sees, never what is calculated or paid — see
+     * the note there. Upline is hidden as of 2026-08-27 at the client's
+     * request; it keeps writing ₹50 per Sq.Ft. to the ledger and reconciliation
+     * keeps checking it.
+     */
+    public function isVisible(): bool
+    {
+        return (bool) config('rewards.visibility.'.$this->value, true);
+    }
+
+    /**
+     * The engines an operator can see, in declaration order.
+     *
+     * Every screen that lists reward types uses this rather than `cases()`, so
+     * hiding one is a config change rather than an edit in a dozen views.
+     *
+     * @return list<self>
+     */
+    public static function visible(): array
+    {
+        return array_values(array_filter(self::cases(), fn (self $type) => $type->isVisible()));
+    }
+
+    /**
+     * The same list as raw enum values, for `whereIn` on the ledger.
+     *
+     * @return list<string>
+     */
+    public static function visibleValues(): array
+    {
+        return array_map(fn (self $type) => $type->value, self::visible());
+    }
+
     public function phase(): int
     {
         return match ($this) {

@@ -151,6 +151,44 @@ final class Money
         return number_format((float) $value, self::SCALE);
     }
 
+    /**
+     * Indian digit grouping, always exactly 2 decimal places.
+     *
+     *      2500000    -> 25,00,000.00
+     *      147058.823 -> 1,47,058.82
+     *
+     * The last three digits group as a thousand, everything above them in
+     * pairs. The Company Club specification writes every figure this way and
+     * requires a maximum of two decimals in the UI and reports, so its screens
+     * use this rather than the Western grouping the older screens were built
+     * with. Applying it app-wide is a one-line change per view if wanted.
+     *
+     * DISPLAY ONLY. Never feed the result back into arithmetic.
+     */
+    public static function inr(string $value): string
+    {
+        self::assertNumeric($value);
+
+        $rounded = self::round($value, self::SCALE);
+
+        $negative = str_starts_with($rounded, '-');
+        $rounded = ltrim($rounded, '-');
+
+        [$whole, $decimals] = array_pad(explode('.', $rounded, 2), 2, '00');
+        $decimals = str_pad(substr($decimals, 0, self::SCALE), self::SCALE, '0');
+
+        $lastThree = substr($whole, -3);
+        $rest = substr($whole, 0, -3);
+
+        if ($rest !== '') {
+            // Group the remaining digits in pairs, right to left.
+            $rest = preg_replace('/\B(?=(\d{2})+(?!\d))/', ',', $rest);
+            $whole = $rest.','.$lastThree;
+        }
+
+        return ($negative ? '-' : '').$whole.'.'.$decimals;
+    }
+
     private static function assertNumeric(string $value): void
     {
         if (! is_numeric($value)) {

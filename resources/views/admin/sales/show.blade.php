@@ -54,9 +54,23 @@
                         </span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between">
-                        <span class="text-muted">Property / Plot</span>
-                        <span>{{ $sale->property?->property_code ?? '—' }}</span>
+                        <span class="text-muted">Block</span>
+                        <span>{{ $sale->block_name ?: '—' }}</span>
                     </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Plot number</span>
+                        <span>{{ $sale->plot_number ?: '—' }}</span>
+                    </li>
+                    {{-- The managed Property / Site record. Only sales entered
+                         before block and plot became typed fields (2026-08-31)
+                         carry one, so the row is shown only when there is one
+                         rather than printing a permanent dash. --}}
+                    @if ($sale->property)
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Property / Site</span>
+                            <span>{{ $sale->property->property_code }}</span>
+                        </li>
+                    @endif
                     <li class="list-group-item d-flex justify-content-between">
                         <span class="text-muted">Entered by</span>
                         <span>{{ $sale->enteredBy?->name ?? '—' }}</span>
@@ -96,6 +110,8 @@
 
             @php
                 $directAmount = bcmul($sale->sqft, (string) config('rewards.rates.direct'), 2);
+                // Still computed while Upline is hidden: the pool is still being
+                // formed from this Sq.Ft., the row below is simply not drawn.
                 $uplinePool = bcmul($sale->sqft, (string) config('rewards.rates.upline'), 2);
             @endphp
 
@@ -111,31 +127,49 @@
                         </span>
                         <span class="fw-semibold text-success">₹{{ number_format((float) $directAmount, 2) }}</span>
                     </li>
-                    <li class="list-group-item d-flex justify-content-between">
-                        <span class="text-muted">
-                            Upline pool from this Sq.Ft.
-                            <span class="d-block text-body-tertiary">
-                                split equally among up to {{ config('rewards.upline.max_levels') }} active uplines
+                    @if (App\Enums\RewardType::Upline->isVisible())
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">
+                                Upline pool from this Sq.Ft.
+                                <span class="d-block text-body-tertiary">
+                                    split equally among up to {{ config('rewards.upline.max_levels') }} active uplines
+                                </span>
                             </span>
-                        </span>
-                        <span class="fw-semibold">₹{{ number_format((float) $uplinePool, 2) }}</span>
-                    </li>
+                            <span class="fw-semibold">₹{{ number_format((float) $uplinePool, 2) }}</span>
+                        </li>
+                    @endif
                     <li class="list-group-item d-flex justify-content-between">
                         <span class="text-muted">Counts toward team target</span>
                         <span class="fw-semibold">
                             {{ number_format((float) $sale->sqft, 2) }} Sq.Ft.
                         </span>
                     </li>
+                    {{-- Company Club counts this sale only while the seller is
+                         ACTIVE — the one rule that differs from every other
+                         engine, so it is stated on the sale itself. --}}
                     <li class="list-group-item d-flex justify-content-between">
-                        <span class="text-muted">Counts toward company club</span>
-                        <span class="badge text-bg-light border">not yet built</span>
+                        <span class="text-muted">Counts toward Company Club</span>
+                        @if ($sale->member?->isActive())
+                            <span class="fw-semibold">
+                                {{ number_format((float) $sale->sqft, 2) }} Sq.Ft.
+                            </span>
+                        @else
+                            <span class="badge text-bg-secondary"
+                                  title="The seller is inactive, so this sale is excluded from the Company Club pool. The other engines are unaffected.">
+                                excluded &mdash; seller inactive
+                            </span>
+                        @endif
                     </li>
                 </ul>
                 <div class="card-footer bg-white small text-muted">
-                    Figures shown are what this sale contributes. The upline pool is split
-                    across the seller's chain rather than paid to one member, and the
-                    seller's own monthly total drives it — see the
-                    <a href="{{ route('admin.calculations.upline.explain', [$sale->member_id, 'period' => $sale->registry_date->format('Y-m')]) }}">upline explorer</a>.
+                    Figures shown are what this sale contributes.
+                    @if (App\Enums\RewardType::Upline->isVisible())
+                        The upline pool is split across the seller's chain rather than paid to one
+                        member, and the seller's own monthly total drives it — see the
+                        <a href="{{ route('admin.rewards.upline.explain', [$sale->member_id, 'period' => $sale->registry_date->format('Y-m')]) }}">upline explorer</a>.
+                    @else
+                        A sale is never editable, so these are final for this registry.
+                    @endif
                 </div>
             </div>
 

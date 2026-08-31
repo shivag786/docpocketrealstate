@@ -38,4 +38,4 @@ When user says Start Phase X:
 - stop.
 
 ## Calculation separation
-Direct ₹40, Upline ₹50, Target ₹30 and Company Club ₹30 are independent engines.
+Direct ₹40, Upline ₹50, Target ₹30 and Company Club ₹50 are independent engines.

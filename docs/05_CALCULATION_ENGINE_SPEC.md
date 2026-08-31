@@ -48,9 +48,29 @@ Confirmed 2026-08-17 (full statement in `02_BUSINESS_RULES.md` §3.1):
 7. Member Active/Inactive status is not consulted.
 
 ## E. Company Club
-`company_sqft = SUM(all approved member sales for period)`
-`club_amount = company_sqft × 30`
-Store a snapshot calculation for historical reconciliation.
+
+**REVISED 2026-08-19 — see `docs/company-club/` for the full specification.**
+The earlier `SUM(all approved sales) × 30` was informational only. It is now a
+distributed reward, and the seller's status matters.
+
+```
+company_sqft = SUM(approved sales for the period WHERE seller is ACTIVE)
+pool         = company_sqft × 50            # ONE pool for the month
+recipients   = DISTINCT(up to 5 ACTIVE sponsors above each eligible seller,
+                        inactive sponsors skipped without consuming a level,
+                        the Club itself never counted)
+share        = pool ÷ COUNT(recipients)     # rounded half-up, 2 decimals
+```
+
+Invariant on every run: `distributed = pool + residual`. The residual is the
+rounding difference, or the negative of the whole pool when eligible sales exist
+but no member qualifies. It is recorded, never absorbed silently.
+
+This engine is the ONLY one that consults the seller's Active/Inactive status,
+so its total Sq.Ft. can legitimately differ from the Direct run's total.
+
+Store a snapshot calculation for historical reconciliation
+(`company_club_calculation_runs`), and never delete a superseded one.
 
 ## F. Precision
 Use exact decimal arithmetic. Define the final currency rounding rule before production, especially when upline division produces paise.

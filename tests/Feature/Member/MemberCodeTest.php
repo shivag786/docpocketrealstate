@@ -35,10 +35,49 @@ class MemberCodeTest extends TestCase
         ], $overrides);
     }
 
+    /**
+     * Pin the whole code format for one test.
+     *
+     * The prefix, the padding AND the starting number, together. Pinning only
+     * the prefix left these tests reading the deployment's configured
+     * `start_at`, so changing it to 101 (client, 2026-08-19) made five of them
+     * fail while nothing about the mechanism had changed. A test of the
+     * mechanism must not depend on a deployment setting.
+     */
+    private function fixCode(string $prefix, int $pad = 0, int $startAt = 1): void
+    {
+        config([
+            'members.code.prefix' => $prefix,
+            'members.code.pad' => $pad,
+            'members.code.start_at' => $startAt,
+        ]);
+    }
+
+    #[Test]
+    public function the_configured_prefix_and_start_number_are_dprs_and_101(): void
+    {
+        // The live setting, asserted directly: the first member of a fresh
+        // install is DPRS101.
+        $this->assertSame('DPRS', config('members.code.prefix'));
+        $this->assertSame(101, (int) config('members.code.start_at'));
+
+        $member = app(MemberService::class)->create($this->payload());
+
+        $this->assertSame('DPRS101', $member->member_code);
+        $this->assertSame(101, $member->sequence_number);
+
+        $second = app(MemberService::class)->create($this->payload());
+
+        $this->assertSame('DPRS102', $second->member_code);
+    }
+
     #[Test]
     public function codes_are_sequential_and_use_the_configured_prefix(): void
     {
-        config(['members.code.prefix' => 'RS', 'members.code.pad' => 0]);
+        // start_at is pinned as well as the prefix. These tests are about the
+        // MECHANISM, so they must not move when the deployment changes its
+        // configured starting number (it is 101 in this project).
+        $this->fixCode('RS', 0, 1);
 
         $service = app(MemberService::class);
 
@@ -60,7 +99,7 @@ class MemberCodeTest extends TestCase
     #[Test]
     public function the_prefix_is_admin_configurable(): void
     {
-        config(['members.code.prefix' => 'ABC']);
+        $this->fixCode('ABC', 0, 1);
 
         $member = app(MemberService::class)->create($this->payload());
 
@@ -70,7 +109,7 @@ class MemberCodeTest extends TestCase
     #[Test]
     public function padding_is_configurable(): void
     {
-        config(['members.code.prefix' => 'RS', 'members.code.pad' => 5]);
+        $this->fixCode('RS', 5, 1);
 
         $member = app(MemberService::class)->create($this->payload());
 
@@ -82,7 +121,7 @@ class MemberCodeTest extends TestCase
     {
         $service = app(MemberService::class);
 
-        config(['members.code.prefix' => 'OLD', 'members.code.pad' => 0]);
+        $this->fixCode('OLD', 0, 1);
         $first = $service->create($this->payload());
 
         config(['members.code.prefix' => 'NEW']);
@@ -99,7 +138,7 @@ class MemberCodeTest extends TestCase
     #[Test]
     public function a_soft_deleted_member_does_not_release_its_code(): void
     {
-        config(['members.code.prefix' => 'RS', 'members.code.pad' => 0]);
+        $this->fixCode('RS', 0, 1);
 
         $service = app(MemberService::class);
 

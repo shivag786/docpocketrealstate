@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Reward;
 
-use App\Enums\CalculationRunType;
+use App\Enums\MemberStatus;
 use App\Models\Member;
 use App\Models\RegistrySale;
 use App\Models\RewardLedger;
@@ -243,7 +243,7 @@ class TeamSalesTest extends TestCase
         // FLAGGED: not explicitly confirmed by the client — see PROJECT_STATE.
         ['rahul' => $rahul, 'a' => $a] = $this->sampleNetwork();
 
-        $a->update(['status' => \App\Enums\MemberStatus::Inactive]);
+        $a->update(['status' => MemberStatus::Inactive]);
         $this->sell($a, '1500.00');
 
         $this->service->calculate('2026-06', $this->admin);
@@ -323,7 +323,7 @@ class TeamSalesTest extends TestCase
         $this->post(route('admin.calculations.team'), ['period' => '2026-06'])
             ->assertRedirect(route('login'));
 
-        $this->get(route('admin.calculations.team.report'))->assertRedirect(route('login'));
+        $this->get(route('admin.rewards.team-sales'))->assertRedirect(route('login'));
     }
 
     #[Test]
@@ -337,7 +337,7 @@ class TeamSalesTest extends TestCase
         $this->service->calculate('2026-06', $this->admin);
 
         $this->actingAs($this->admin)
-            ->get(route('admin.calculations.team.report', ['period' => '2026-06']))
+            ->get(route('admin.rewards.team-sales', ['period' => '2026-06']))
             ->assertOk()
             ->assertSee($rahul->member_code)
             ->assertSee('3,000.00')   // Rahul's total team
@@ -353,7 +353,7 @@ class TeamSalesTest extends TestCase
         $this->service->calculate('2026-06', $this->admin);
 
         $this->actingAs($this->admin)
-            ->get(route('admin.calculations.team.contributors', [$rahul, 'period' => '2026-06']))
+            ->get(route('admin.rewards.team-sales.contributors', [$rahul, 'period' => '2026-06']))
             ->assertOk()
             ->assertSee($c->member_code)
             ->assertSee('1,500.00')

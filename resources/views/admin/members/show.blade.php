@@ -1,5 +1,17 @@
 @extends('layouts.admin')
 
+@php
+    /**
+     * A member with no sponsor sits directly under the Company Club, which is a
+     * system entity with no member row. "Root" was the old wording for exactly
+     * the same thing and is no longer used in the UI. The name is read from the
+     * Company Club settings, so renaming the club renames it here too.
+     *
+     * Resolved ONCE per page rather than per row.
+     */
+    $clubName = \App\Models\CompanyClubSetting::current()->name();
+@endphp
+
 @section('title', $member->member_code)
 @section('page-title', $member->name)
 
@@ -9,6 +21,43 @@
 @endsection
 
 @section('page-actions')
+    {{-- Printables. Both open in a new tab and render inline, because the
+         operator's next action is Ctrl+P, not a file on disk. Each menu item
+         also offers the download for when it is not. --}}
+    <div class="btn-group">
+        <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle"
+                data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-printer me-1"></i>Print
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+                <a class="dropdown-item" target="_blank" rel="noopener"
+                   href="{{ route('admin.members.letter', $member) }}">
+                    <i class="bi bi-file-earmark-text me-2"></i>Welcome letter
+                </a>
+            </li>
+            <li>
+                <a class="dropdown-item" target="_blank" rel="noopener"
+                   href="{{ route('admin.members.card', $member) }}">
+                    <i class="bi bi-person-vcard me-2"></i>ID card
+                </a>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+                <a class="dropdown-item small"
+                   href="{{ route('admin.members.letter', ['member' => $member, 'download' => 1]) }}">
+                    <i class="bi bi-download me-2"></i>Download letter (PDF)
+                </a>
+            </li>
+            <li>
+                <a class="dropdown-item small"
+                   href="{{ route('admin.members.card', ['member' => $member, 'download' => 1]) }}">
+                    <i class="bi bi-download me-2"></i>Download ID card (PDF)
+                </a>
+            </li>
+        </ul>
+    </div>
+
     <a href="{{ route('admin.tree.index', ['member' => $member->id]) }}" class="btn btn-sm btn-outline-primary">
         <i class="bi bi-diagram-3 me-1"></i>Tree
     </a>
@@ -21,11 +70,42 @@
 @endsection
 
 @section('content')
+    {{-- Shown once, immediately after registration: the client's workflow is
+         "register, then print something to hand them". Anywhere else this
+         would be noise, so it rides on a flash and disappears on reload. --}}
+    @if (session('just_created'))
+        <div class="card border-primary mb-3">
+            <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div>
+                    <div class="fw-semibold">
+                        <i class="bi bi-printer me-1 text-primary"></i>
+                        Print {{ $member->name }}'s welcome pack
+                    </div>
+                    <div class="small text-muted">
+                        Both open in a new tab, ready to print. The company name, logo and
+                        signatory come from
+                        <a href="{{ route('admin.settings.edit') }}">Settings</a>.
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{{ route('admin.members.letter', $member) }}"
+                       target="_blank" rel="noopener" class="btn btn-primary">
+                        <i class="bi bi-file-earmark-text me-1"></i>Welcome letter
+                    </a>
+                    <a href="{{ route('admin.members.card', $member) }}"
+                       target="_blank" rel="noopener" class="btn btn-outline-primary">
+                        <i class="bi bi-person-vcard me-1"></i>ID card
+                    </a>
+                </div>
+            </div>
+        </div>
+    @endif
+
     {{-- Member card summary --}}
     <div class="row g-3 mb-3">
         @foreach ([
             ['Member ID', $member->member_code, 'bi-hash'],
-            ['Level', $member->isRoot() ? 'Root' : 'L' . $level, 'bi-layers'],
+            ['Level', $member->isRoot() ? $clubName : 'L' . $level, 'bi-layers'],
             ['Direct members', number_format($referrals->total()), 'bi-people'],
             ['Total team', number_format($branch['total']), 'bi-diagram-2'],
         ] as [$label, $value, $icon])
@@ -48,11 +128,19 @@
     <ul class="nav nav-tabs" role="tablist">
         @foreach ([
             ['overview', 'Overview', 'bi-person-badge', null],
-            ['upline', 'Sponsor / Upline', 'bi-arrow-up-circle', null],
+            // The sponsor chain, which is a different thing from the Upline
+            // reward and is NOT hidden. It was labelled "Sponsor / Upline"
+            // until 2026-08-27; the feature is unchanged, the word is not.
+            ['sponsor-chain', 'Sponsor Chain', 'bi-arrow-up-circle', null],
             ['team', 'Direct Team', 'bi-people', null],
             ['tree', 'Full Tree', 'bi-diagram-3', null],
             ['direct', 'Direct Reward', 'bi-cash-coin', null],
-            ['upline-reward', 'Upline Reward', 'bi-arrow-up-circle', null],
+            // The Upline Reward tab is hidden with the rest of that engine
+            // (2026-08-27). The Sponsor / Upline tab above is a different
+            // thing entirely - it is the sponsor chain, not the reward.
+            ...(App\Enums\RewardType::Upline->isVisible()
+                ? [['upline-reward', 'Upline Reward', 'bi-arrow-up-circle', null]]
+                : []),
         ] as [$id, $label, $icon, $phase])
             <li class="nav-item" role="presentation">
                 <button class="nav-link {{ $loop->first ? 'active' : '' }}"
@@ -69,6 +157,7 @@
         @foreach ([
             ['Sales', 'bi-receipt', route('admin.sales.index', ['member_id' => $member->id])],
             ['Targets', 'bi-bullseye', route('admin.targets.show', $member)],
+            ['Reward Ledger', 'bi-journal-text', route('admin.ledger.member', $member)],
         ] as [$label, $icon, $url])
             <li class="nav-item" role="presentation">
                 <a class="nav-link" href="{{ $url }}">
@@ -93,6 +182,19 @@
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <span class="text-muted">Email</span><span>{{ $member->email ?: '—' }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Designation</span><span>{{ $member->designation }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Blood group</span>
+                            <span>
+                                @if ($member->blood_group)
+                                    <span class="badge text-bg-light border">{{ $member->blood_group->label() }}</span>
+                                @else
+                                    <span class="text-muted">Not recorded</span>
+                                @endif
+                            </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between">
                             <span class="text-muted">Joining date</span>
@@ -158,11 +260,13 @@
                                     @endif
                                 </span>
                             </li>
-                            @foreach ([
+                            @foreach (array_values(array_filter([
                                 ['Direct reward', $performance['direct']],
-                                ['Upline reward', $performance['upline']],
+                                App\Enums\RewardType::Upline->isVisible()
+                                    ? ['Upline reward', $performance['upline']]
+                                    : null,
                                 ['Target reward', $performance['target_reward']],
-                            ] as [$label, $amount])
+                            ])) as [$label, $amount])
                                 <li class="list-group-item d-flex justify-content-between">
                                     <span class="text-muted">{{ $label }}</span>
                                     <span class="fw-semibold tabular {{ bccomp($amount, '0', 2) > 0 ? 'text-success' : 'text-body-tertiary' }}">
@@ -208,18 +312,22 @@
             </div>
         </div>
 
-        {{-- Sponsor / Upline --}}
-        <div class="tab-pane fade" id="tab-upline" role="tabpanel">
+        {{-- Sponsor Chain --}}
+        <div class="tab-pane fade" id="tab-sponsor-chain" role="tabpanel">
             @if ($member->isRoot())
                 <p class="text-muted mb-0">
                     <i class="bi bi-info-circle me-1"></i>
-                    This is a root member with no sponsor. Under the confirmed rule, a seller
-                    with zero uplines produces no upline reward.
+                    This member has no sponsor, so they sit directly under
+                    <strong>{{ $clubName }}</strong>. {{ $clubName }} is a system entity, not a
+                    member: it is never counted as a level and never receives a reward.
                 </p>
             @else
                 <p class="small text-muted">
-                    Nearest sponsor first. The upline reward considers at most
-                    {{ config('rewards.upline.max_levels') }} levels; the full chain is shown here.
+                    Nearest sponsor first, all the way to the top of the chain.
+                    @if (App\Enums\RewardType::Upline->isVisible())
+                        The upline reward considers at most
+                        {{ config('rewards.upline.max_levels') }} levels; the full chain is shown here.
+                    @endif
                 </p>
 
                 <div class="table-responsive">
@@ -230,7 +338,9 @@
                                 <th>Member ID</th>
                                 <th>Name</th>
                                 <th>Status</th>
-                                <th class="text-end">Within upline limit</th>
+                                @if (App\Enums\RewardType::Upline->isVisible())
+                                    <th class="text-end">Within upline limit</th>
+                                @endif
                             </tr>
                         </thead>
                         <tbody>
@@ -248,24 +358,28 @@
                                             {{ $upline->status->label() }}
                                         </span>
                                     </td>
-                                    <td class="text-end">
-                                        @if ($loop->iteration <= config('rewards.upline.max_levels'))
-                                            <i class="bi bi-check-circle text-success"></i>
-                                        @else
-                                            <span class="text-muted small">beyond limit</span>
-                                        @endif
-                                    </td>
+                                    @if (App\Enums\RewardType::Upline->isVisible())
+                                        <td class="text-end">
+                                            @if ($loop->iteration <= config('rewards.upline.max_levels'))
+                                                <i class="bi bi-check-circle text-success"></i>
+                                            @else
+                                                <span class="text-muted small">beyond limit</span>
+                                            @endif
+                                        </td>
+                                    @endif
                                 </tr>
                             @endforeach
                         </tbody>
                     </table>
                 </div>
 
-                <p class="small text-muted mt-3 mb-0">
-                    <i class="bi bi-exclamation-triangle me-1"></i>
-                    Which uplines actually qualify is not yet confirmed — see the open
-                    question on upline eligibility. This column reflects position only.
-                </p>
+                @if (App\Enums\RewardType::Upline->isVisible())
+                    <p class="small text-muted mt-3 mb-0">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        Which uplines actually qualify is not yet confirmed — see the open
+                        question on upline eligibility. This column reflects position only.
+                    </p>
+                @endif
             @endif
         </div>
 
@@ -376,7 +490,7 @@
                             @foreach ($directRewards as $row)
                                 <tr>
                                     <td>
-                                        <a href="{{ route('admin.calculations.direct.ledger', ['period' => $row->period]) }}"
+                                        <a href="{{ route('admin.rewards.direct-ledger', ['period' => $row->period]) }}"
                                            class="text-decoration-none">{{ $row->period }}</a>
                                     </td>
                                     <td class="text-end">{{ number_format($row->entries) }}</td>
@@ -398,7 +512,9 @@
             @endif
         </div>
 
-        {{-- Upline Reward --}}
+        {{-- Upline Reward. Rendered only while that engine is on show; the
+             panel is left intact so switching it back on restores it whole. --}}
+        @if (App\Enums\RewardType::Upline->isVisible())
         <div class="tab-pane fade" id="tab-upline-reward" role="tabpanel">
             <p class="small text-muted">
                 A share of each downline seller's monthly pool
@@ -408,7 +524,7 @@
                 target achievement has no effect on this reward.
             </p>
 
-            <a href="{{ route('admin.calculations.upline.explain', $member) }}" class="btn btn-sm btn-outline-primary mb-3">
+            <a href="{{ route('admin.rewards.upline.explain', $member) }}" class="btn btn-sm btn-outline-primary mb-3">
                 <i class="bi bi-diagram-3 me-1"></i>Open Upline Explorer
             </a>
 
@@ -432,7 +548,7 @@
                             @foreach ($uplineRewards as $row)
                                 <tr>
                                     <td>
-                                        <a href="{{ route('admin.calculations.upline.ledger', ['period' => $row->period]) }}"
+                                        <a href="{{ route('admin.rewards.upline', ['period' => $row->period]) }}"
                                            class="text-decoration-none">{{ $row->period }}</a>
                                     </td>
                                     <td class="text-end">{{ number_format($row->entries) }}</td>
@@ -451,5 +567,6 @@
                 </div>
             @endif
         </div>
+        @endif
     </div>
 @endsection

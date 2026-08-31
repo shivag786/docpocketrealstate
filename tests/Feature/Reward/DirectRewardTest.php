@@ -3,18 +3,14 @@
 namespace Tests\Feature\Reward;
 
 use App\Enums\CalculationRunStatus;
-use App\Enums\CalculationRunType;
 use App\Enums\RewardType;
-use App\Models\CalculationRun;
 use App\Models\Member;
 use App\Models\RegistrySale;
 use App\Models\RewardLedger;
 use App\Models\User;
 use App\Services\DirectRewardService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
-use RuntimeException;
 use Tests\TestCase;
 
 /**

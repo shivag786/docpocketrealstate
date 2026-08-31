@@ -77,6 +77,42 @@
                             @error('member_id')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
                         </div>
 
+                        {{-- Registry date.
+                             Promoted out of the optional section and defaulted to
+                             today: this single field decides which month the sale
+                             is rewarded in, and back-dating is a normal operation
+                             — entering history, or a registry that came through
+                             late. Hiding it behind an accordion made the common
+                             case invisible. --}}
+                        <div class="row g-3 align-items-start mb-3">
+                            <div class="col-12 col-md-6">
+                                <label for="registry_date" class="form-label fw-semibold">Registry date</label>
+                                <input type="date"
+                                       id="registry_date"
+                                       name="registry_date"
+                                       value="{{ old('registry_date', now()->format('Y-m-d')) }}"
+                                       max="{{ now()->format('Y-m-d') }}"
+                                       class="form-control form-control-lg @error('registry_date') is-invalid @enderror">
+                                @error('registry_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                <div class="form-text">
+                                    Today by default. Pick an earlier date to record a past sale —
+                                    future dates are not accepted.
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-md-6">
+                                <div class="border rounded p-2 h-100 bg-light-subtle">
+                                    <div class="stat-label">Reward month</div>
+                                    <div class="small text-muted">
+                                        This date decides which month the sale is rewarded in. Saving
+                                        rebuilds that month's reward figures straight away — and,
+                                        because targets accumulate across months, re-judges every
+                                        month after it.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         {{-- Sq.Ft. + live direct amount --}}
                         <div class="row g-3 align-items-start">
                             <div class="col-12 col-md-6">
@@ -116,12 +152,104 @@
                 </div>
 
                 {{-- ------------------------------------------------------------
-                     Optional supporting detail, collapsed by default.
+                     Where the plot is.
+
+                     A visible card rather than a collapsed accordion, at the
+                     client's request (2026-08-31): staff record this on nearly
+                     every sale, and it was previously hidden behind "Optional".
+
+                     The project is a dropdown because projects are a managed
+                     list. Block and plot number are typed, because they are not
+                     — a project gains blocks as it is laid out. The block field
+                     offers what has already been recorded against the chosen
+                     project, so repeated entry converges on one spelling without
+                     ever refusing a new block.
+                ------------------------------------------------------------- --}}
+                <div class="card mt-3">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <strong>Plot location</strong>
+                        <span class="small text-muted">Optional &mdash; does not affect the reward</span>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-4">
+                                <label for="project_id" class="form-label">Project</label>
+                                <select id="project_id"
+                                        name="project_id"
+                                        class="form-select @error('project_id') is-invalid @enderror"
+                                        data-project-select
+                                        data-block-target="block_name">
+                                    <option value="">— None —</option>
+                                    @foreach ($projects as $id => $name)
+                                        <option value="{{ $id }}" @selected(old('project_id') == $id)>{{ $name }}</option>
+                                    @endforeach
+                                </select>
+                                @error('project_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+
+                            <div class="col-12 col-md-4">
+                                <label for="block_name" class="form-label">Block name</label>
+
+                                <div data-block-picker
+                                     data-search-url="{{ route('admin.sales.blocks') }}">
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white text-muted">
+                                            <i class="bi bi-grid-3x3-gap"></i>
+                                        </span>
+                                        <input type="text"
+                                               id="block_name"
+                                               name="block_name"
+                                               value="{{ old('block_name') }}"
+                                               class="form-control @error('block_name') is-invalid @enderror"
+                                               placeholder="e.g. Block C"
+                                               autocomplete="off"
+                                               maxlength="100"
+                                               data-block-input>
+                                        @error('block_name')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+
+                                    {{-- Suggestions land here. Never a <select>:
+                                         a new block must always be typeable. --}}
+                                    <div class="list-group border rounded mt-1 d-none shadow-sm position-absolute"
+                                         style="z-index: 5;"
+                                         data-block-results></div>
+                                </div>
+
+                                <div class="form-text" data-block-hint>
+                                    Pick a project to see the blocks already recorded in it.
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-md-4">
+                                <label for="plot_number" class="form-label">Plot number</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-white text-muted"><i class="bi bi-signpost"></i></span>
+                                    <input type="text"
+                                           id="plot_number"
+                                           name="plot_number"
+                                           value="{{ old('plot_number') }}"
+                                           class="form-control @error('plot_number') is-invalid @enderror"
+                                           placeholder="e.g. 118"
+                                           autocomplete="off"
+                                           maxlength="50">
+                                    @error('plot_number')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="form-text">Free text — "118", "A-12", "118/2" are all fine.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- ------------------------------------------------------------
+                     Registry paperwork, collapsed by default.
                 ------------------------------------------------------------- --}}
                 @php
-                    $hasOptional = old('project_id') || old('property_id') || old('registry_reference')
-                        || old('registry_date') || old('notes')
-                        || $errors->hasAny(['project_id', 'property_id', 'registry_reference', 'registry_date', 'notes']);
+                    // registry_date, project, block and plot are no longer in
+                    // here — the date decides the reward month, and the location
+                    // is recorded on nearly every sale.
+                    $hasOptional = old('registry_reference') || old('notes')
+                        || $errors->hasAny(['registry_reference', 'notes']);
                 @endphp
 
                 <div class="accordion mt-3" id="saleOptionalAccordion">
@@ -133,7 +261,7 @@
                                     data-bs-target="#saleOptionalDetails"
                                     aria-expanded="{{ $hasOptional ? 'true' : 'false' }}">
                                 <i class="bi bi-sliders me-2"></i>
-                                Property &amp; registry details
+                                Registry paperwork
                                 <span class="badge text-bg-light border ms-2 fw-normal">Optional</span>
                             </button>
                         </h2>
@@ -148,33 +276,6 @@
                                 </p>
 
                                 <div class="row g-3">
-                                    <div class="col-12 col-md-6">
-                                        <label for="project_id" class="form-label">Project</label>
-                                        <select id="project_id"
-                                                name="project_id"
-                                                class="form-select @error('project_id') is-invalid @enderror"
-                                                data-project-select
-                                                data-properties-url="{{ route('admin.properties.for-project') }}">
-                                            <option value="">— None —</option>
-                                            @foreach ($projects as $id => $name)
-                                                <option value="{{ $id }}" @selected(old('project_id') == $id)>{{ $name }}</option>
-                                            @endforeach
-                                        </select>
-                                        @error('project_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                    </div>
-
-                                    <div class="col-12 col-md-6">
-                                        <label for="property_id" class="form-label">Property / Plot</label>
-                                        <select id="property_id"
-                                                name="property_id"
-                                                class="form-select @error('property_id') is-invalid @enderror"
-                                                data-property-select
-                                                data-selected="{{ old('property_id') }}">
-                                            <option value="">— None —</option>
-                                        </select>
-                                        @error('property_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                    </div>
-
                                     <div class="col-12 col-md-6">
                                         <label for="registry_reference" class="form-label">Registry number</label>
                                         <div class="input-group">
@@ -191,20 +292,6 @@
                                         <div class="form-text">
                                             When given it must be unique, which stops the same registry
                                             being entered twice.
-                                        </div>
-                                    </div>
-
-                                    <div class="col-12 col-md-6">
-                                        <label for="registry_date" class="form-label">Registry date</label>
-                                        <input type="date"
-                                               id="registry_date"
-                                               name="registry_date"
-                                               value="{{ old('registry_date') }}"
-                                               max="{{ now()->format('Y-m-d') }}"
-                                               class="form-control @error('registry_date') is-invalid @enderror">
-                                        @error('registry_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                        <div class="form-text">
-                                            Defaults to today. This decides the reward month.
                                         </div>
                                     </div>
 
@@ -258,7 +345,9 @@
                                 <div class="text-muted">{{ $entry->member->name }}</div>
                                 <div class="text-muted">
                                     {{ $entry->registry_date->format('d M Y') }}
-                                    @if ($entry->property)
+                                    @if ($entry->location())
+                                        &middot; {{ $entry->location() }}
+                                    @elseif ($entry->property)
                                         &middot; {{ $entry->property->property_code }}
                                     @endif
                                     @if ($entry->registry_reference)

@@ -244,7 +244,10 @@ class TreeNavigationTest extends TestCase
             ->get(route('admin.members.show', $root))
             ->assertOk()
             ->assertSee('Overview')
-            ->assertSee('Sponsor / Upline')
+            // Renamed from "Sponsor / Upline" on 2026-08-27. The tab is the
+            // sponsor chain and is unchanged; only the word went, with the rest
+            // of the Upline reward's vocabulary.
+            ->assertSee('Sponsor Chain')
             ->assertSee('Direct Team')
             ->assertSee('Full Tree')
             ->assertSee('Total team');
@@ -253,11 +256,19 @@ class TreeNavigationTest extends TestCase
     #[Test]
     public function the_profile_marks_later_phase_tabs_as_unavailable(): void
     {
+        $member = Member::factory()->create();
+
         $this->actingAs($this->admin)
-            ->get(route('admin.members.show', Member::factory()->create()))
+            ->get(route('admin.members.show', $member))
             ->assertOk()
+            // Reward Ledger was the unbuilt example here until Phase 13
+            // delivered it; it is now a real link out to the member's statement.
             ->assertSee('Reward Ledger')
-            ->assertSee('Delivered in Phase 13');
+            ->assertSee(route('admin.ledger.member', $member), false)
+            ->assertDontSee('Delivered in Phase 13')
+            // Reports is the nearest unbuilt screen and keeps the rule honest:
+            // nothing undelivered is a dead end.
+            ->assertSee('Delivered in Phase 14');
     }
 
     #[Test]

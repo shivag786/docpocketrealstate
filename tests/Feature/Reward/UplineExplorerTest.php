@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Reward;
 
-use App\Enums\MemberStatus;
 use App\Models\Member;
 use App\Models\RegistrySale;
 use App\Models\User;
@@ -11,6 +10,16 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
+/**
+ * The Upline Explorer.
+ *
+ * THE SCREEN IS HIDDEN, NOT DELETED (client-confirmed 2026-08-27). The engine
+ * still runs and still pays ₹50 per Sq.Ft.; only the pages are switched off,
+ * and one config line brings them back. These tests therefore switch the flag
+ * on and go on covering the page in full, so what is being restored is known to
+ * work — plus one test at the bottom that the page really is unreachable while
+ * the flag is off.
+ */
 class UplineExplorerTest extends TestCase
 {
     use RefreshDatabase;
@@ -23,8 +32,40 @@ class UplineExplorerTest extends TestCase
     {
         parent::setUp();
 
+        config(['rewards.visibility.upline' => true]);
+
         $this->admin = User::factory()->admin()->create();
         $this->service = app(UplineRewardService::class);
+    }
+
+    #[Test]
+    public function the_explorer_is_unreachable_while_the_engine_is_hidden(): void
+    {
+        config(['rewards.visibility.upline' => false]);
+
+        $member = Member::factory()->create();
+
+        // 404 rather than 403: to an operator these pages do not exist. Nothing
+        // links to them any more, so reaching one means an old bookmark.
+        $this->actingAs($this->admin)
+            ->get(route('admin.rewards.upline.explain', $member))
+            ->assertNotFound();
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.rewards.upline'))
+            ->assertNotFound();
+    }
+
+    #[Test]
+    public function the_sidebar_drops_the_upline_entry_while_it_is_hidden(): void
+    {
+        config(['rewards.visibility.upline' => false]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.dashboard'))
+            ->assertOk()
+            ->assertDontSee('Upline Rewards')
+            ->assertDontSee(url('/admin/rewards/upline'));
     }
 
     /**
@@ -151,7 +192,7 @@ class UplineExplorerTest extends TestCase
     {
         $member = Member::factory()->create();
 
-        $this->get(route('admin.calculations.upline.explain', $member))
+        $this->get(route('admin.rewards.upline.explain', $member))
             ->assertRedirect(route('login'));
     }
 
@@ -164,7 +205,7 @@ class UplineExplorerTest extends TestCase
         $this->service->calculate('2026-06', $this->admin);
 
         $this->actingAs($this->admin)
-            ->get(route('admin.calculations.upline.explain', [$branch['g'], 'period' => '2026-06']))
+            ->get(route('admin.rewards.upline.explain', [$branch['g'], 'period' => '2026-06']))
             ->assertOk()
             ->assertSee('How an upline reward is produced')
             ->assertSee($branch['a']->member_code)   // root in the hierarchy
@@ -176,14 +217,18 @@ class UplineExplorerTest extends TestCase
     }
 
     #[Test]
-    public function the_explorer_tells_a_root_member_they_generate_no_upline(): void
+    public function the_explorer_tells_a_member_under_the_club_they_generate_no_upline(): void
     {
+        // A member with no sponsor sits directly under the Company Club. The UI
+        // used to call this a "root member"; the wording was replaced on
+        // 2026-08-19 because the Club is what is actually above them.
         $root = Member::factory()->create();
 
         $this->actingAs($this->admin)
-            ->get(route('admin.calculations.upline.explain', $root))
+            ->get(route('admin.rewards.upline.explain', $root))
             ->assertOk()
-            ->assertSee('This is a root member');
+            ->assertSee('sits directly under Company Club')
+            ->assertDontSee('This is a root member');
     }
 
     #[Test]

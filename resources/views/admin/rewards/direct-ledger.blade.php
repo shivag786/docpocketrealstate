@@ -4,7 +4,7 @@
 @section('page-title', 'Direct Reward — ' . $period)
 
 @section('breadcrumbs')
-    <li class="breadcrumb-item"><a href="{{ route('admin.calculations.index') }}">Calculations</a></li>
+    <li class="breadcrumb-item">Rewards</li>
     <li class="breadcrumb-item active" aria-current="page">Direct Reward</li>
 @endsection
 
@@ -83,7 +83,7 @@
                                 <i class="bi bi-cash-coin fs-2 d-block mb-2 opacity-50"></i>
                                 No direct rewards calculated for {{ $period }}.
                                 <a href="{{ route('admin.calculations.index', ['period' => $period]) }}">
-                                    Run the calculation
+                                    Check the calculation state for this month
                                 </a>.
                             </td>
                         </tr>

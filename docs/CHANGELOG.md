@@ -31,6 +31,990 @@ Chronological project history. Claude must append an entry after each meaningful
 
 ---
 
+### 2026-08-31 — Sign-in convenience, change password, readable password storage
+
+**Added**
+- **Sign-in email is pre-filled** from `config('company.login.default_email')`
+  (`LOGIN_DEFAULT_EMAIL`, defaulting to the seeded admin address), so a
+  single-operator install only types a password. `old()` still wins after a
+  failed attempt, and the field stays editable so a second operator can sign in
+  on the same machine. Focus now starts on the password.
+- **Show/hide eye toggle** on every password field — one generic
+  `[data-password-toggle]` handler in `app.js`, used by the sign-in form and by
+  all three fields on the change-password form.
+- **Settings › Password.** Change your own password: current password required,
+  minimum 8 characters with a letter and a number, confirmed, and rate-limited
+  to 6 attempts a minute.
+- **`php artisan app:set-password`** — interactive recovery from the server for
+  an account whose password is not known.
+
+**Changed — CLIENT DECISION, read this before "fixing" it**
+- **Passwords are now also stored unencrypted**, in `users.password_plain`, and
+  shown on Settings › Password. The client asked for this, was told in writing
+  what it costs — anyone who can read the database or a backup has the operator's
+  real password, and any account where it was reused — and confirmed.
+
+  What did NOT change: `users.password` is still the bcrypt hash and is still
+  the only column authentication reads. `users.password_plain` is a convenience
+  copy. **Dropping the column breaks nothing.** A test asserts sign-in is
+  unaffected when the readable copy is deliberately corrupted.
+
+  It is excluded from model serialisation, so it does not leak into JSON
+  responses or logs that happen to include a user.
+
+**Database**
+- `users.password_plain` — nullable. NULL for an account whose password predates
+  the column; a hash cannot be reversed, so those stay NULL until the password
+  is next set. The existing admin account was backfilled with the seeded
+  default after verifying it signs in.
+
+**Config**
+- `company.login.default_email` — reads `LOGIN_DEFAULT_EMAIL`, documented in
+  `.env.example`. Set it empty for a blank field. Note it publishes a valid
+  account name on a public page: a deliberate trade for a small back office.
+
+**Tests**
+- `ChangePasswordTest` (14) — the change flow, wrong current password, mismatch,
+  reuse, weak passwords, plus the readable copy being written, displayed, not
+  serialised, not written on a rejected change, and not used for authentication.
+- Full suite: 662 tests, 660 passing (the two pre-existing Company Club date
+  failures are unchanged).
+
+**Decision**
+- `Auth::logoutOtherDevices()` was written into the change-password flow and
+  then removed. It only ends other sessions when Laravel's `AuthenticateSession`
+  middleware is active, which this application does not use — without it the
+  call rewrites the hash and silently ends nothing. The screen now says plainly
+  that other sessions continue until they expire, rather than claiming a
+  protection that is not there.
+- Password changes are self-service only. There is no user-management screen,
+  and an admin able to rewrite another operator's password from here could lock
+  them out with nothing recording that a person rather than that operator did it.
+
+**Next**
+- If the readable-password decision is ever revisited: drop
+  `users.password_plain`, delete `User::setPassword()`'s second column and
+  `readablePassword()`, and remove the panel on Settings › Password. Nothing
+  else depends on it.
+
+---
+
+### 2026-08-31 — Welcome letter controls, one-page guarantee, developer system reset
+
+**Added**
+- **Settings › Welcome Letter.** Six switches controlling which optional rows the
+  letter prints: designation, contact number, email, blood group, sponsor and
+  company name. Stored on `company_settings.letter_fields`, merged over the
+  defaults in `config/company.php` so a field added later switches on for every
+  existing install with no data migration.
+- **Settings › Developer** — a one-click system reset that empties every
+  business table so the system can be handed over fresh after online testing.
+  Three guards: the `DEVELOPER_TOOLS` env flag, the existing admin role
+  middleware, and a typed `RESET` confirmation enforced server-side.
+- `SystemResetService`, with an explicit children-first table list and a
+  `PRESERVES` guard that a test asserts does not intersect `CLEARS`.
+- Settings is now a tabbed section — Company / Welcome Letter / Developer — with
+  matching children in the sidebar.
+
+**Changed**
+- **The welcome letter is guaranteed to fit one A4 page.** The first attempt at
+  the worst case (every row on, a company name and address long enough to wrap,
+  a sponsor) rendered as TWO pages; type sizes and spacing were tightened until
+  it fits, and the signing block is a fixed 33mm that content above cannot
+  squeeze. `WelcomeLetterTest` renders that worst case and asserts a page count
+  of exactly 1, so the guarantee is enforced rather than assumed.
+- The letter now reserves a marked **seal box** alongside the signature line,
+  for the physical rubber stamp.
+- A row switched ON is still skipped when the member has nothing to put in it
+  (no sponsor, no blood group). Email is the exception and prints
+  "Not recorded", because a blank there reads as an oversight, not a fact.
+
+**Database**
+- `company_settings.letter_fields` — nullable JSON. NULL means "never
+  configured" and reads as the config defaults, so installs predating the
+  column behave exactly as before.
+
+**Config**
+- `company.letter.fields` — the default row switches.
+- `company.developer_tools` — reads `DEVELOPER_TOOLS`, false by default and
+  documented in `.env.example`.
+
+**Tests**
+- `WelcomeLetterTest` (8) — the one-page guarantee at both extremes, toggles on
+  and off, rows that cannot be hidden, empty-value skipping.
+- `SystemResetTest` (10) and `SystemResetDisabledTest` (4) — the gate, the typed
+  confirmation, what is cleared, and what must survive.
+- Full suite: 648 tests, 646 passing (the two pre-existing Company Club date
+  failures documented in the previous entry are unchanged).
+
+**Issues**
+- None new. The two Company Club failures remain and are still unrelated.
+
+**Decision**
+- **The developer gate is per-request middleware, not an `if` around the route
+  definitions.** The `if` version was written first and looked stricter — the
+  route would not exist at all. It is wrong: route registration happens once and
+  `php artisan route:cache` freezes the flag's value into
+  `bootstrap/cache/routes-*.php`, so a deployment that cached its routes while
+  the flag was on would keep serving the reset page after the flag was turned
+  off — precisely the go-live moment the flag exists for. The middleware reads
+  the flag on every request and returns 404, not 403, so nothing confirms the
+  page is there.
+- **Name, Member ID and joining date are not toggleable.** A letter that cannot
+  say who it is for, what their code is, or when they joined is not a welcome
+  letter.
+- **The reset keeps `users` and both settings tables.** Losing the admin login
+  would lock the operator out of the panel they had just cleared, and the
+  company branding is configuration rather than data.
+- The member-code restart is not special-cased: `MemberCodeGenerator` reads
+  `MAX(sequence_number)` from an empty `members` table and returns the
+  configured `start_at`, so codes resume at DPRS101 on their own.
+
+**Next**
+- Turn `DEVELOPER_TOOLS` off in `.env` at go-live, after the final reset.
+
+---
+
+### 2026-08-31 — Member profile fields, plot location, company settings, printable member documents
+
+Four client requests delivered together, because three of them meet on the same
+screens and the fourth needs the company identity the third one stores.
+
+**Added**
+- **Blood group and designation on a member.** Blood group is optional and picked
+  from the eight ABO/Rh groups (`App\Enums\BloodGroup`). Designation is required,
+  defaults to **Sales Advisor**, and is chosen from an admin-editable list.
+- **Block name and plot number on sale entry.** The project stays a dropdown; the
+  block and plot are typed. The block field suggests blocks already recorded
+  against the chosen project (`BlockSearchController`), so repeated entry
+  converges on one spelling without ever refusing a new block. Promoted out of
+  the collapsed "optional" accordion into a visible **Plot location** card,
+  alongside the registry date which already defaults to today.
+- **Company Settings screen** (Administration › Settings) — company name,
+  tagline, logo, address, phone, email, website, authorised signatory and
+  signature image, plus the designation list. Fills the Phase 16 placeholder
+  that was sitting disabled in the sidebar.
+- **Welcome letter and ID card as PDFs**, per member. Both reachable from a Print
+  menu on the member profile, and offered directly after registration. Both open
+  inline (the next action is Ctrl+P); `?download=1` saves instead.
+
+**Changed**
+- The sidebar brand shows the configured company name and logo instead of
+  `config('app.name')` and a fixed icon.
+- The **Property / Plot** dropdown is retired from sale entry, replaced by the
+  typed block and plot. Sales recorded before today keep their `property_id`,
+  and the sale detail screen shows that row only when there is one. Properties /
+  Sites remains a managed screen in its own right.
+- Sales history searches block and plot, and the Project column shows the plot
+  location.
+- An update that omits `designation` keeps the member's current one. Every
+  member holds a designation from the day they join, so there is nothing to
+  clear, and a partial update correcting a mobile number must not be rejected
+  over a field it never touched. A designation an admin has since removed from
+  the list also stays valid for members already holding it.
+
+**Database**
+- `members`: `blood_group` (nullable), `designation` (NOT NULL, defaults to the
+  configured **Sales Advisor**, so existing rows backfill to it).
+- `registry_sales`: `block_name`, `plot_number`, both nullable, plus a
+  `(project_id, block_name)` index for the suggestion lookup.
+- `company_settings`: new single-row table, same shape as `company_club_settings`.
+
+**Dependencies**
+- `barryvdh/laravel-dompdf` ^3.1. The existing `PdfTableWriter` stays where it
+  is — it renders report tables and cannot place an image, which a letterhead
+  needs. Images reach dompdf as base64 data URIs rather than paths, because the
+  files live under `storage/` and dompdf's chroot defaults to `public/`.
+
+**Tests**
+- Full suite: 627 tests, 625 passing. No new failures.
+
+**Manual verification**
+- Both PDFs render with and without a logo uploaded.
+- Settings save normalises the designation list: trimmed, blanks dropped,
+  duplicates collapsed case-insensitively, default always kept and first.
+- Block lookup returns a project's blocks and declines to guess without one.
+
+**Issues**
+- Two **pre-existing** Company Club test failures, unrelated to this work and
+  only reproducible on the 29th–31st of a month:
+  `CompanyClubTest::periods_are_calculated_independently` and
+  `CompanyClubIncomeTest::the_month_filter_switches_periods`. Both build two
+  periods as `now()->subMonths(2)` and `now()->subMonth()`. PHP's month
+  arithmetic overflows, so on 2026-08-31 the first lands on 2026-07-01 and the
+  second on 2026-07-31 — the same period. The fix belongs in the tests
+  (`->startOfMonth()` before subtracting), not in the engine.
+
+**Decision**
+- Designations live in `company_settings` as JSON, not in an enum and not in a
+  child table: the client will rename ranks, an enum would need a deployment,
+  and a table would add a join to the member form for a short ordered list of
+  strings. Members store the chosen string, so renaming a rank does not rewrite
+  the designation on members already issued a printed card.
+- The ID card prints as an A4 sheet with front and back at exact CR80 size and
+  cut guides, not as CR80 pages. Staff print on an office printer, where a CR80
+  page comes out as a stamp in the corner of an A4 sheet.
+
+**Next**
+- Nothing blocking. A member photo on the ID card is the obvious follow-up if
+  the client wants one.
+
+---
+
+### 2026-08-27 — Upline hidden from the back office (the engine keeps paying)
+
+Client: *"no need of upline any where. hide from their."* Confirmed the same day
+that this means **hide the screens, not stop paying**, and that **Company Club is
+untouched**.
+
+Two unrelated things are called "upline" in this system, and only the first was
+touched: the **Upline Reward** (₹50 per Sq.Ft., pooled and split among up to 5
+active uplines) and the **sponsor chain** (the tree, the member profile's chain
+tab, `ValidSponsor`, and the Company Club's own separate upward walk). Removing
+the second would have taken the sponsor tree and Company Club down with it.
+
+**Added**
+- `config('rewards.visibility')` — one flag per engine, and the single switch
+  behind all of this. `RewardType::isVisible()`, `::visible()` and
+  `::visibleValues()` are what every screen asks, so hiding an engine is a config
+  change rather than an edit in a dozen views.
+- `HiddenUplineTest` — 6 cases holding both halves of the arrangement: the word
+  "upline" appears on **none** of fifteen operator screens (loaded for real and
+  searched, so a panel nobody thought of cannot slip through), the engine still
+  writes ₹50,000 for a 1,000 Sq.Ft. sale, a new sale still rebuilds it,
+  reconciliation still shows AND still checks it, and one config line brings
+  every screen back.
+
+**Changed** — Upline is now absent from:
+- the sidebar; the dashboard card and the "All rewards" headline total;
+- the Calculation Center's engine card, its single-engine button and its run
+  history;
+- every Reward Ledger surface — rows, filters, the by-engine split, totals,
+  downloads, the entry page and the member statement;
+- the member profile's Upline Reward tab and its Overview performance line;
+- the sale detail page's pool row and its explorer link.
+- `/admin/rewards/upline` and `/admin/rewards/upline/explain/{member}` now 404.
+  The routes and the pages are left in place: this is a screen switched off, not
+  a feature removed.
+- The member profile tab **"Sponsor / Upline" is now "Sponsor Chain"** — the
+  sponsor chain is not the reward and is unchanged, but the word went with the
+  rest. Its reward-specific column ("Within upline limit") and footnotes are
+  hidden with the engine. Two other display strings were reworded the same way:
+  the Calculation Center's Company Club rule ("5 active sponsor levels") and the
+  Company Club tree tooltip.
+
+**Database**
+- None. No row was deleted and no figure moved.
+
+**Tests**
+- Tests that cover the Upline screens now switch the flag on and go on covering
+  them in full, so what a restore would bring back is known to work.
+  `UplineExplorerTest` gained two cases proving the pages 404 and the sidebar
+  entry disappears while the flag is off.
+- Whole suite green: 627 tests.
+
+**Issues**
+- **The ledger's totals are deliberately no longer the whole of what the system
+  owes.** A Sq.Ft. still carries ₹140 of reward before targets (40 + 50 + 50);
+  the ledger now reports ₹90 of it. Reconciliation is where the full figure
+  stays visible.
+
+**Decision**
+- **RECONCILIATION IS THE ONE SCREEN THAT STILL SHOWS A HIDDEN ENGINE**, marked
+  with a "Hidden" badge and a line saying it is still calculated. A reward that
+  is still being written but is exempt from every check is money moving where
+  nothing is watching — that is worse than either showing it or stopping it. The
+  Calculation Center points at that screen without naming the engine.
+- **A flag, not a deletion.** The engine, its service, its tables, its report and
+  its explorer are all intact, so the decision is reversible with one line and
+  the figures come back whole. Deleting would have thrown away six phases of
+  work over a display preference.
+
+**Next**
+- Phase 14 — Reports.
+
+---
+
+### 2026-08-26 — Phase 13 — Reward Ledger & reconciliation
+
+The phase's exit condition is "every amount is explainable". Four engines write
+to one `reward_ledger` table and, until now, nothing read it as a whole: each
+reward report showed its own engine, so no screen could answer what a member or
+a month actually owed, and nothing ever re-checked that the table agreed with
+the runs that produced it.
+
+**Added**
+- **The complete ledger** (`/admin/ledger`) — every rupee from all four engines
+  in one table, with filters for month, engine, payment status and member,
+  sortable columns, server-side paging and CSV / Excel / PDF downloads. Opens on
+  the current month; a member search lifts that automatically and looks across
+  every month, because pinning a search to one month makes search look broken.
+- **The entry page** (`/admin/ledger/{id}`) — one amount explained in full: the
+  member, the engine, the month, the arithmetic, the source record with a link
+  to it, the run that wrote it, the rest of that run, and the member's other
+  rewards for the same month. This is the screen the phase's exit condition
+  rests on.
+- **Reconciliation** (`/admin/ledger/reconciliation`) — eight checks over one
+  month, each stated in the terms the engine it tests actually promises:
+  1. every amount belongs to a completed run of its own month and engine;
+  2. every source record still exists;
+  3. Direct and Target amounts multiply out exactly;
+  4. every pool was shared out in full, to within rounding;
+  5. no member was paid twice from the same source;
+  6. each engine's ledger total matches the total its run recorded;
+  7. the Direct ledger equals the month's approved sales;
+  8. every confirmed payment names an admin and a date.
+  Each check prints why it exists and lists the rows it is unhappy about.
+- **A member statement** (`/admin/ledger/member/{member}`) — one member's whole
+  reward history by engine and by month, reached from a new "Reward Ledger" tab
+  on the member profile. `04_UI_UX_SPECIFICATION.md` listed that tab from the
+  start; this is the first phase that could fill it.
+- **Mark Paid for Direct and Upline.** Target and Company Club were given their
+  own controls when they were built, so two of the four engines could calculate
+  a reward that could never be confirmed. The ledger's control works for all
+  four and delegates to the existing `RewardPaymentService` — one definition of
+  what payment means, one month-end rule, one lock. "Mark all paid" is one
+  engine at a time, deliberately.
+- `App\Services\RewardLedgerService` — source resolution and the eight checks.
+- `App\Http\Controllers\Admin\RewardLedgerController`, four views under
+  `resources/views/admin/ledger/`.
+
+**Changed**
+- The sidebar's Reward Ledger entry is a real link with a submenu (Complete
+  Ledger, Reconciliation) instead of a disabled "P13" badge.
+- The member profile links out to the statement, alongside Sales and Targets.
+
+**Database**
+- None. `reward_ledger` already carried member, type, source, period, run, the
+  frozen rate and the payment fields — the traceability this phase reports on
+  was designed in from Phase 5 and needed reading, not extending.
+
+**Tests**
+- `RewardLedgerTest` — 22 cases: the four engines on one page, the opening
+  month, search lifting the month, type and status filters, totals covering the
+  whole filtered set rather than the page, a direct reward tracing to its sale,
+  an upline share tracing to its seller, Mark Paid for Direct and for Upline, a
+  month still running refusing payment, paying one engine at a time, a rejected
+  unknown reward type, double payment refused, all three download formats with
+  the month in the filename, and filters carried into the file.
+- `LedgerReconciliationTest` — 19 cases. **Every check is tested twice: that it
+  passes on a healthy month, and that it catches the fault it claims to catch.**
+  Faults are injected with raw UPDATE statements, because the engines cannot
+  produce them — which is the point.
+- Whole suite green: 613 tests.
+
+**Manual verification**
+- Routes registered and resolving (`route:list --path=ledger`), Pint clean.
+
+**Issues**
+- The duplicate check can only be verified in its passing state: the unique
+  index makes the failing case unconstructable through any route. The test
+  asserts the index rejects the insert alongside it, so both halves are covered.
+- The export ceiling is 5,000 rows, matching the Direct Sale report.
+
+**Decision**
+- **A check that cries wolf is worse than no check.** The Calculation Center
+  already had to remove one false alarm on live data, so no check here is one
+  rule imposed on four engines. `sqft × rate = amount` is asserted only for
+  Direct and Target, because Upline and Company Club store the pool's inputs on
+  the row and pay a share of it — an operator who checked the multiplication on
+  an upline row would otherwise conclude the system had underpaid. Those two are
+  reconciled pool by pool instead, with a paisa a row of rounding slack.
+- **Only Direct is compared against raw sales**, for the same reason.
+- **Reconciliation never writes.** A report that could repair what it measures
+  could hide a fault by fixing it. Two tests hold the line: one asserts a broken
+  month is unchanged by reconciling it, and one asserts the service contains no
+  write path at all.
+
+**Next**
+- Phase 14 — Reports.
+
+---
+
+### 2026-08-25 — Downloads on every report, and one confirmation dialog
+
+Client request: *"show sweetalert when mark paid. show the proper details of the
+person inside popup"* and *"show pdf, excel, csv option of datatable … like
+direct sales datatable, one month two month three month, company club eligible
+members. when download then perid month also be there."*
+
+**Added**
+- **CSV / Excel / PDF downloads** on the Direct Sale report, all three Target
+  screens (achieved and not-reached, per level) and the Company Club eligible
+  member list — plus the Member Status report, which already had them.
+- `App\Support\Export\TableExport` — one place that turns a title, a subtitle,
+  headings and rows into any of the three formats. `XlsxWriter` and
+  `PdfTableWriter` moved here out of the Member Status module, so the whole
+  application shares one implementation instead of two.
+- `resources/views/admin/partials/export-menu.blade.php` — the download control,
+  shared by every page that offers one.
+- **The period travels with every download**, in three places: the filename
+  (`target-1-month-achieved-2026-07.pdf`), a context line inside the file, and
+  the PDF's subtitle. A month's figures with no month on them get paid twice.
+- **SweetAlert2** for every confirmation in the back office. `window.App.confirm()`
+  takes a title, a sentence and a list of labelled details, so a Mark Paid dialog
+  now shows WHO is being paid — member code, name, mobile, target/reward, month,
+  amount — instead of a browser prompt that can only ask "are you sure?".
+
+**Changed**
+- The two generic confirmation handlers (`[data-confirm]` in app.js,
+  `[data-confirm-submit]` in sale-entry.js) now open the shared dialog. That one
+  change upgrades every existing confirmation — sale entry, Mark Paid on Target
+  and Company Club, Mark all paid, recalculation, settings — with no per-page
+  work. Both replay the submit after confirming, because the dialog is async.
+- Target and Company Club Mark Paid buttons carry `data-confirm-details`, so the
+  person and the amount are in the dialog.
+- The Member Status payment modal uses the same dialog.
+
+**Database**
+- None.
+
+**Tests**
+- `ReportExportTest` — 11 cases: each format on each page, the month in the
+  filename and inside the file, filters carried into the download, achieved and
+  not-reached as separate files, unknown formats 404, guests redirected, and an
+  uncalculated Company Club month exporting an empty table rather than an
+  invented one.
+- Whole suite green: 572 tests.
+
+**Issues**
+- **A demo seeder re-run broke 17 ledger links, and they were repaired.** The
+  July demo seeder deletes and re-inserts its own sales. Between its first run
+  and a re-run, a July Company Club reward was marked paid, which locks the
+  month against recalculation — so the delete/insert went through and the
+  rebuild did not, leaving 17 direct-reward rows pointing at sale ids that no
+  longer existed. Every one was repointed to the identical replacement sale
+  (same member, same Sq.Ft., same month); no amount changed and no payment was
+  touched. The seeder now checks both months for a paid reward BEFORE deleting
+  anything and refuses with an explanation, so the sequence cannot repeat.
+
+**Decision**
+- The export writers moved OUT of the Member Status module rather than being
+  copied. The module now uses the application's shared utilities, which is a
+  deliberate step away from "lift the folder out and it is gone" — worth it to
+  avoid two implementations of a PDF writer.
+
+**Next**
+- The remaining tables (Sales History, Upline ledger, Team Sales) can take the
+  same partial and the same `TableExport` call whenever they are wanted.
+
+### 2026-08-25 — Team Target: the winning prizes are fixed amounts
+
+Client request: *"here need to update winning prize of target month. 50000 for
+one month, 2 lakh win- 2 month, 7 lakh winning amount - 3 month target"*.
+
+**Changed**
+- The three targets now win FIXED PRIZES instead of threshold × ₹30:
+
+  | Target | Threshold | Window | Was | Now |
+  |---|---|---|---|---|
+  | 1 | 5,000 Sq.Ft. | 1 month | ₹150,000 | **₹50,000** |
+  | 2 | 10,000 Sq.Ft. | 2 months | ₹300,000 | **₹200,000** |
+  | 3 | 35,000 Sq.Ft. | 3 months | ₹1,050,000 | **₹700,000** |
+
+  Thresholds and month counts are unchanged. Only the prize moved.
+- `TargetLevel::reward()` now READS `rewards.targets.*.reward` instead of
+  multiplying threshold × rate. The prize is the authoritative figure; nothing
+  derives it any more.
+- `TargetLevel::rate()` is now a DERIVED per-level value (prize ÷ threshold =
+  ₹10 / ₹20 / ₹20), kept only so `sqft × rate = amount` still holds on every
+  `reward_ledger` row, which is what reconciliation reads. The three prizes
+  cannot be expressed as one shared rate, which is why the single Target rate
+  had to go.
+- `rewards.rates.target` (30) is marked SUPERSEDED in config. Nothing reads it —
+  `RewardType::Target->rate()` has no callers — and it was left in place rather
+  than removed so that method's return value does not silently change.
+- Docblocks on `TargetLevel` and `TargetRewardService`, and the rule text in
+  `02_BUSINESS_RULES.md` §3 / §3.1, `01_MASTER_DEVELOPMENT_PLAN.md` Phase 8,
+  `06_TESTING_AND_ACCEPTANCE.md` and `PROJECT_STATE.md`.
+
+**Database**
+- None. No migration, no column, no data change. Every verdict already freezes
+  its own threshold, rate and prize onto `target_calculations`, and every ledger
+  row already carries its own amount, so **runs that have already happened keep
+  the figures they were calculated with**.
+
+**Tests**
+- New: `the_confirmed_prizes_and_their_derived_rates_stay_consistent` pins the
+  client's three figures and asserts `sqft × rate = prize` for each level, so a
+  prize edited without its rate fails the suite instead of quietly breaking
+  reconciliation.
+- Updated 20 assertions across `TargetRewardTest`, `MultiMonthTargetTest`,
+  `CalculationCenterTest`, `RecalculationTest` and `TargetPagesTest`. Each was
+  read in context — `300000.00` meant "two Target 1 prizes" in one place and
+  "the Target 2 prize" in another.
+- Whole suite green: 560 tests.
+
+**Issues**
+- **Unpaid past periods will change amount if recalculated.** A month whose
+  target rewards are still `posted` recalculates at the new prizes — a member
+  who was showing ₹150,000 will show ₹50,000. Paid rewards are safe: payment
+  locks the period against recalculation, so anything already confirmed keeps
+  its old figure and its ledger row is untouched.
+
+**Decision**
+- The prize replaced the rate rather than the rate being changed to suit, because
+  50,000/5,000 = 10 while 200,000/10,000 = 20 — no single rate reproduces all
+  three. Making the prize authoritative is what the client actually described:
+  a winning amount per target, not a price per Sq.Ft.
+
+**Next**
+- If the client also wants the THRESHOLDS revisited, that is a separate change:
+  the ladder's difficulty is now decoupled from its prizes.
+
+### 2026-08-25 — Company Club: the direct-member pool
+
+Client request: *"one more calculation box ... total sales sqft * 30 rs
+multiply. elegible members are, who directly attached with company club. show
+equal amount"*, plus *"can you make that boxes colour seperate"*.
+
+**Added**
+- A second pool on the Company Club overview, shown as its own card: the same
+  eligible Sq.Ft. as the main pool × ₹30, split equally between the ACTIVE
+  members attached directly to the Club (the members with no sponsor).
+- `CompanyClubCalculationService::directClubPool()` — the arithmetic, in the
+  write-nothing service beside `compute()`, returning the same shape (pool,
+  count, share, distributed, residual).
+- `CompanyClubTreeService::directClubMemberCount()` / `directClubMembers()`, and
+  `active_direct_club_members` on the network summary.
+- `rewards.company_club.direct_rate` (30), with the rule written out in config.
+- `.figure-tile` / `.calc-card` SCSS: a colour per step of a formula, and a
+  colour per calculation card, so the two pools are told apart before they are
+  read. Nine muted tones, including teal/purple/indigo/pink for the new card.
+
+**Changed**
+- The existing live-pool tiles moved from four identical grey boxes to the new
+  coloured `.figure-tile`.
+
+**Database**
+- None. The direct pool is a reported figure and writes no ledger row.
+
+**Tests**
+- `the_overview_shows_the_direct_club_pool_split_between_direct_members`
+- `the_direct_club_pool_excludes_inactive_direct_members`
+- Full suite: 484 passed.
+
+**Decision**
+- The Sq.Ft. base is deliberately SHARED with the main pool, so the
+  inactive-seller exclusion applies to both and the two can never disagree about
+  how big the month was.
+- Inactive direct members are excluded from the divisor, consistent with every
+  other engine in the module. The page says so out loud when it happens, because
+  the count would otherwise contradict "Directly under the Club" above it.
+- Rate lives in config, not `company_club_settings`: the main rate is editable
+  because runs freeze it, and nothing freezes this one yet.
+
+**Next**
+- Confirm with the client whether this pool should become a real distribution
+  (its own run + ledger rows) or stay a reported figure.
+
+---
+
+### 2026-08-19 — Phase 11: Company Club
+
+Client confirmations that shaped it: **"50 rs"** for the rate, and *"i think it
+recalculation will help to keep update and need to show past or previous date of
+calculation. so admin never confused about it."*
+
+**Added**
+- `app/Services/CompanyClubCalculationService.php` — the arithmetic. **Writes
+  nothing at all**, which is how Preview is guaranteed not to create a financial
+  row: the object that computes has no access to the ledger, no run and no
+  transaction. Preview and the real calculation call the same method.
+- `app/Services/CompanyClubTreeService.php` — the upward walk (active sponsors
+  only, inactive skipped without consuming a level, cap of 5 ACTIVE levels, the
+  Club never a level) plus lazy tree loading.
+- `app/Services/CompanyClubService.php` — preview, calculate, recalculate, run
+  codes, settings.
+- `app/Services/CompanyClubReportService.php` — every read the screens make.
+- Models `CompanyClubSetting`, `CompanyClubCalculationRun`, `CompanyClubReward`,
+  `CompanyClubEligibilityPath`.
+- Controllers `CompanyClubController`, `CompanyClubReportController`,
+  `CompanyClubSettingsController`; request
+  `CompanyClub/UpdateCompanyClubSettingsRequest`.
+- Nine Blade views under `resources/views/admin/company-club/` plus the
+  `_run-status`, `_period-filter` and `_calculation-tree` partials.
+- `resources/js/company-club.js` — lazy tree expansion over the standard AJAX
+  envelope.
+- `Money::inr()` — Indian digit grouping at exactly 2 decimals
+  (`25,00,000.00`, `1,47,058.82`), as the specification writes every figure.
+
+**Changed**
+- `config/rewards.php` — `company_club` rate **30 → 50**, with a new
+  `company_club` block documenting the whole rule and the override.
+- `app/Services/PeriodRecalculationService.php` — **the one existing engine file
+  touched.** Company Club now runs last in the period rebuild, guarded by "only
+  if this month already has a completed run".
+- `resources/views/layouts/partials/sidebar.blade.php` — the disabled Phase 11
+  placeholder becomes a seven-item submenu.
+- `resources/views/admin/calculations/index.blade.php` — Company Club leaves
+  "Not built yet" and becomes a described link out to its own module.
+- `resources/views/admin/sales/show.blade.php` — "not yet built" becomes the
+  sale's real contribution, or an explicit "excluded — seller inactive".
+- `resources/scss/app.scss` — calculation-tree and network-root styling.
+- Documentation reconciled to ₹50 in `02_BUSINESS_RULES.md` §5 and §8,
+  `05_CALCULATION_ENGINE_SPEC.md` §E, `00_PROJECT_README.md`,
+  `07_CLAUDE_WORKFLOW_PROMPT.md`, `09_PHASE_PROMPTS.md`,
+  `app/Services/README.md` and the `RegistrySale` docblock.
+- `tests/Feature/Admin/DashboardAccessTest.php` — the "unbuilt screens say when
+  they arrive" test moved from Company Club to Reward Ledger (Phase 13).
+
+**Database**
+- 4 new tables: `company_club_settings`, `company_club_calculation_runs`,
+  `company_club_rewards`, `company_club_eligibility_paths`.
+- No change to `members`, `registry_sales`, `reward_ledger` or
+  `calculation_runs`. `CalculationRunType::CompanyClub` and
+  `RewardType::CompanyClub` already existed and were finally used.
+- Ledger rows use `source_type = 'company_club_pool'`, `source_id = 0` — the
+  source is the whole month, not one record. The existing unique index
+  `(member_id, reward_type, source_type, source_id, period)` therefore enforces
+  **one Company Club reward per member per month** in the database.
+
+**Tests**
+- 79 new (51 engine + 28 screens). Suite: **454 passing, 1,607 assertions**,
+  0 failures — the 379 that existed before are untouched.
+- Covering all 20 requested acceptance items, plus: the calculation service is
+  structurally incapable of writing; the Company Club walk is asserted to agree
+  with the Upline walk (a tripwire against silent divergence, since the code is
+  deliberately duplicated); running Company Club leaves the Direct and Upline
+  ledgers byte-identical; editing the rate cannot rewrite a recorded run; the
+  database itself refuses a second reward for one member in one month.
+
+**Manual verification**
+- Live August 2026 calculated as `CC-2026-08-0001`: **12,050.50 Sq.Ft. × ₹50 =
+  ₹6,02,525.00**, 7 unique recipients, **₹86,075.00 each, residual ₹0.00**.
+  Ledger sums to ₹6,02,525.00 across exactly 7 rows.
+- RS16's chain verified end to end: RS15 L1, RS14 L2, RS13 L3, **RS12 skipped
+  (inactive)**, RS11 L4, RS10 L5 — five ACTIVE levels across six hops, stopping
+  at RS10's null sponsor without the Club ever counting as a level. RS11 and
+  RS10 each qualified through 3 separate branches and were paid once.
+- `npm run build` clean; the engine figure was predicted by hand during the
+  Phase 1 audit and reproduced exactly by the implementation.
+
+**Decision**
+- **The rate is ₹50 and the money IS distributed**, overriding five places in
+  the repo that said ₹30 and informational-only. This also answers the
+  long-standing open question 11. Cost per Sq.Ft. is now ₹140 before targets
+  (40 + 50 + 50); raised with the client and confirmed.
+- **First calculation explicit, every later one automatic.** Spec §16 requires
+  preview-then-commit; the client wants figures kept current. Both hold: nothing
+  writes until an admin commits a month, and from then on that month rebuilds
+  itself on sale entry. A month nobody has calculated is left alone.
+- **Superseded runs keep their figures.** Recalculation clears the detail rows
+  but the run snapshot survives with its code, pool, recipient count, timestamp
+  and admin — which is what lets every screen show the previous calculation.
+- **The upward walk is duplicated rather than shared with `UplineRewardService`.**
+  Sharing would let a change to the upline rule silently move Company Club
+  money. A test asserts the two agree today.
+- **Company Club is the only engine that consults the seller's status.** Its
+  total Sq.Ft. can legitimately be lower than the Direct total; the screens say
+  so rather than leaving it to be discovered.
+
+**Issues**
+- **Rounding remainder policy still unconfirmed** (raised in
+  `03_COMPANY_CLUB_DECISIONS.md`). Shares are rounded half-up individually and
+  any residual is displayed, following the Phase 6 upline precedent. No
+  adjustment entry or last-recipient sweep was invented.
+- **Void/reversal workflow not built.** A paid month simply refuses to
+  recalculate, as elsewhere in the system.
+- **Indian digit grouping is used on Company Club screens only.** The older
+  screens use Western grouping. `Money::inr()` is central, so applying it
+  app-wide is a one-line change per view if wanted.
+
+**Added later the same day — Income Distribution screen** (client request:
+*"show company club and their direct members and their downlines. show sales
+member and their 5 active upline members as a tree ... keep total sales from
+seller member there. and do not write any l2 l1 type information"*)
+- `admin/company-club/income` — two trees on one page. **Sales and the members
+  they paid**: every seller with their summed Sq.Ft. for the month and the
+  sponsors above them the sale made eligible, each with their amount. **Network**:
+  the Club as root, its direct members, and their downlines, each node carrying
+  own sales, whole-branch total and reward.
+- **No level numbering anywhere on the screen**, by request. The nesting says who
+  is above whom. A test asserts `L1`/`L2`/`Level 1` never appear on the page.
+- Skipped inactive sponsors ARE shown, greyed and struck through — a chain that
+  silently jumped over somebody would look broken rather than simple. Inactive
+  sellers appear too, marked "not counted".
+- **Depth-limited with load-more.** Three levels render immediately; deeper
+  branches load one at a time over AJAX. **A collapsed branch still shows its
+  full branch total** — the picture is partial, the figures never are. Tested.
+- Cost is flat: three queries for the whole tree regardless of size, asserted by
+  a test that fails if it ever starts walking per node.
+- `CompanyClubReportService::incomeTree()`, `incomeBranch()`, `sellerChains()`;
+  views `income`, `_income-node`, `_income-children`; 17 further tests.
+
+**Next**
+- Phase 12 (Calculation Center) or Phase 13 (Reward Ledger — where Direct and
+  Upline get their Mark Paid screens; Company Club already has its own).
+
+---
+
+### 2026-08-18 — Phases 9 & 10: Targets 2 and 3, and a visible sale date
+
+Client: *"two months target value is 10000 and three months target is 35000. no
+need to make any option from admin. once complete the first then next target and
+given month work."* Plus: *"give me a feature to insert old data into sales to do
+testing"* — answered as *"just give a date calendar into sale entry, so past date
+and current date I can put; by default current date will be selected."*
+
+**The admin settings screen is no longer needed.** Phase 9 was blocked on it
+because Targets 2 and 3 were documented as admin-configured. The client dropped
+that in the same breath as confirming the values, so all three targets are now
+fixed constants in `config/rewards.php`. Every verdict still freezes its own
+threshold and rate onto the row, so editing a constant cannot rewrite history.
+
+| Target | Threshold | Window | Reward |
+|---|---|---|---|
+| 1 | 5,000 Sq.Ft. | 1 month | ₹150,000 |
+| 2 | 10,000 Sq.Ft. | 2 months | ₹300,000 |
+| 3 | 35,000 Sq.Ft. | 3 months | ₹1,050,000 |
+
+**Two rules were not in the documentation and were confirmed before building:**
+a member who reaches the threshold early is **paid immediately** rather than
+waiting for the window to close, and a window that closes short **resets to zero
+and opens a fresh block** rather than sliding forward a month at a time. Windows
+therefore never overlap — a month belongs to exactly one attempt, which is what
+the confirmed "never a rolling window" means once a target spans months.
+
+**The rate for Targets 2 and 3 was never separately stated.** It is taken as ₹30,
+the confirmed "Target ₹30" of the four rates in `02_BUSINESS_RULES.md` §8 — a
+rate for the Target engine rather than for Target 1 alone. It reproduces the
+₹300,000 / ₹1,050,000 that `config/rewards.php` has carried since Phase 1. Flagged
+rather than assumed silently.
+
+**Added**
+- `App\Enums\TargetLevel` — threshold, window length, rate, reward and the next
+  rung, in one place. `TargetRewardService::LEVEL` (a hardcoded `1`) is gone
+- `App\Enums\TargetOutcome` — achieved / in progress / missed. **Derived, never
+  stored**: `achieved` stays the single source of the binary verdict and the
+  once-ever guard hangs off it, so a row is in progress when it is not achieved
+  and its period has not reached `window_end`. Two columns able to disagree about
+  the same fact would be worse than a computed one
+- `target_calculations` gains `window_start`, `window_end`, `window_months` and
+  `cumulative_sqft`. `achieved_sqft` keeps its meaning — the team figure for THIS
+  month — and `cumulative_sqft` is the window-to-date total the threshold is
+  tested against. Existing Target 1 rows backfilled to a one-month window
+- `TargetRewardService::windowMonths()` — the month-by-month build-up behind a
+  multi-month verdict. "11,200 of 10,000" is unreadable until you can see it was
+  4,000 then 7,200
+- The three targets each get a sidebar entry with Achieved / Not Reached, and the
+  report pages take a `level` parameter. The level pills carry a count, so an
+  empty level says so rather than looking broken
+
+**The engine now REPLAYS history instead of reading its own previous rows.**
+This is the significant change. A Target 1 verdict was a statement about one
+month and could be computed from that month alone. A Target 2 verdict cannot: it
+depends on which target the member is on, when their window opened, and what has
+accumulated inside it. The obvious approach — read last month's stored verdict
+and carry it forward — breaks the moment a sale is **back-dated**, which is
+precisely the feature added alongside it: every later verdict would be wrong
+while still looking authoritative. Instead `replay()` rebuilds each member's whole
+progression from `team_calculations` and keeps only the period being written. The
+stored rows are an output of the ladder, never an input to it.
+
+**The cost, paid explicitly:** rebuilding one month invalidates the months after
+it. `PeriodRecalculationService` now cascades **Target only** across every later
+period — Direct, Upline and Team Sales each describe one month and are untouched.
+If any month in the cascade holds a paid reward the whole rebuild is refused up
+front rather than half-applied.
+
+**Changed**
+- Team Sales must now be calculated for **every month with sales up to the
+  period**, not just the period itself. A multi-month window reaches backwards, so
+  an un-rolled-up earlier month would silently contribute zero and could turn an
+  achievement into a miss. The error names the months
+- A quiet month inside an open window is still recorded, so the accumulated total
+  does not appear from nowhere when the window closes. A member on the one-month
+  target with no sales is still not recorded — otherwise every member would land
+  on the "not reached" page every month
+- The Calculation Center's target row covers all three levels and is renamed
+  **Team Targets**; Two and Three Month Target are gone from "not built yet"
+- One target run covers all three levels: every member is measured against
+  whichever one they are on, so splitting by level would mean three runs that each
+  had to know about the other two
+
+**Sale entry — the date is now on the form**
+- The registry date existed but sat inside the collapsed "additional detail"
+  accordion and started **empty**, so recording a past sale looked impossible. It
+  is now a labelled date picker in the main form, **prefilled with today**, capped
+  at today, and sits beside a note saying it decides the reward month and that
+  saving rebuilds that month and re-judges every month after it
+- No new bulk tool was built: the client asked for the date picker specifically,
+  and back-dating already worked server-side
+
+**Tests**
+- 20 new tests (379 total, 1,306 assertions, all passing)
+- New `MultiMonthTargetTest` (14): the window opens the month after the previous
+  target and not before; accumulation across months; a quiet month mid-window is
+  recorded; reaching it early pays at once and opens the next target immediately;
+  a closed-short window resets to zero and opens a fresh block; **windows never
+  overlap** — 3,000 then 6,000 then 5,000 must not pay, where a rolling window
+  would; the reward is fixed at the threshold on every target; the Target 2
+  surplus does not carry into Target 3; the whole ladder pays 150,000 + 300,000 +
+  1,050,000 and then stops measuring; Target 3 across three months; **back-dating
+  re-judges every later month**; the cascade is refused when a later month is
+  paid; the engine refuses when an earlier month with sales was never rolled up
+- Target pages: the level switcher shows each target's own population, all three
+  levels render, an unknown level falls back to the first, and a multi-month
+  verdict shows its month-by-month build-up
+- Sale entry: the form offers a date picker defaulting to today, and a back-dated
+  sale is rewarded in the month it is dated
+- Four existing tests changed expectation rather than being repaired — they
+  asserted that a member who achieved Target 1 gets **no verdict** the following
+  month, which was true only while Target 2 did not exist. They now assert the
+  member is measured against Target 2 from that month
+
+**Manual verification**
+- **The new engine reproduces the live data exactly.** Replaying June, July and
+  August against the stored rows gives the same 7 / 7 / 11 members measured, the
+  same single achiever, and the same ₹150,000. No live figure moved
+- All three target pages, both tabs, the sale entry form and the Calculation
+  Center return 200 on live data
+- At `?level=2` the sidebar opens the Two Month Target group with Achieved
+  active, and leaves the other two collapsed; Company Club (P11) and Reward Ledger
+  (P13) are still correctly marked as not built
+- The sale-entry date field renders in the main form (line 370) ahead of the
+  optional accordion (line 432), prefilled with today and capped at today
+
+**Decision**
+- No settings screen, and no bulk test-data generator. Both were on the table and
+  both were declined by the client in favour of fixed constants and a date picker
+
+**Next**
+- Phase 11 (Company Club) is the only reward engine left. Phase 13's Reward Ledger
+  is where Direct and Upline get their Mark Paid screens
+
+---
+
+### 2026-08-18 — Calculation Center rewritten; reward reports moved out of it
+
+Raised by the client: *"I cannot understand the calculation first page. While I am
+clicking and opening I am not understanding what the page needs to say"* and
+*"why is the upline page connected with the calculation page"*. Both had the same
+root cause — the screen still described the Phase 5 workflow.
+
+**The page was built for a workflow that no longer exists.** Until 2026-08-17 an
+operator picked a month and pressed four **"Calculate X"** buttons. Since sale
+entry started rebuilding every engine automatically, all four are already done by
+the time anyone opens the page: every card sat in its "Already calculated — run
+#12" state with nothing to press, and the page never said what it was for.
+
+**Changed**
+- The Calculation Center is now a **state** page, not a **do-work** page. It opens
+  by saying nothing here needs pressing day to day, then shows each engine twice —
+  **worked out from the sales as they stand now**, beside **what its last run
+  actually stored**. Agreement is the normal case and is stated; disagreement is
+  flagged on the engine and on the month
+- One **Rebuild this month** button replaces the four separate ones, running all
+  four engines in dependency order through `PeriodRecalculationService`. Four
+  buttons let an operator run Team Sales without re-running Target after it, which
+  silently judges this month's targets against an older rollup. Single-engine runs
+  are kept but demoted behind a closed disclosure that says why
+- The month now carries its own state — **Still running / Month over / Locked by a
+  payment**, and **In step / Out of step / Never calculated** — with a sentence
+  under it explaining what that means for the figures and for payment
+- Months whose figures have drifted from their sales are listed at the top, the
+  one thing on the page that actually needs an operator. Normally empty
+
+**Removed — text that was no longer true**
+- *"Recalculation is not available until Phase 12"* on all four cards. It has been
+  automatic since 2026-08-17
+- The controller docblock claiming *"PHASE 5 SCOPE: only Calculate Direct is
+  wired"* — all four have been wired since Phase 8
+- The sidebar tagging Calculations as **Phase 12**; it shipped in Phase 5
+- The Team Sales card advertising targets of *"5,000 / 10,000 / 35,000 Sq.Ft."*.
+  Only 5,000 is client-confirmed; Targets 2 and 3 are admin-configured and their
+  numbers have never been agreed. The "not built yet" entries now say that instead
+- *"Calculate All — Phase 12"*, which Rebuild now delivers
+
+**Moved — reward reports out of the machine room**
+The sidebar's **Upline Rewards** pointed at `/admin/calculations/upline`, so
+opening a reward report dropped the operator inside Calculations, highlighted
+**Calculations** in the menu and produced the breadcrumb *Calculations › Upline*.
+The Upline, Team Sales and Direct-ledger reports had been written into
+`CalculationController` for convenience in Phases 5–7; Direct Sale, built later,
+was correctly given its own home under `rewards/`. Two reports of identical
+purpose therefore lived in two different places.
+
+- New `RewardReportController` holds `directLedger`, `uplineLedger`,
+  `uplineExplain`, `teamSales` and `teamContributors`
+- New URLs: `/admin/rewards/upline`, `/admin/rewards/upline/explain/{member}`,
+  `/admin/rewards/team-sales`, `/admin/rewards/team-sales/contributors/{member}`,
+  `/admin/rewards/direct-ledger`. Views moved to `resources/views/admin/rewards/`
+- **The five old URLs redirect**, so bookmarks and links already sent to the
+  client still land on the right page. They are named `admin.moved.*` — an unnamed
+  route inside a `->name()` group inherits the bare prefix and several would then
+  collide on the same name
+- Breadcrumbs on the moved pages now read *Rewards › …* rather than linking back
+  into Calculations, and their empty states say "check the calculation state for
+  this month" instead of "run the calculation", which is no longer a thing an
+  operator does
+- **Team Sales** was a delivered screen reachable only from inside the Calculation
+  Center. It now has its own sidebar entry under Rewards. This is a deliberate
+  addition to the navigation in `04_UI_UX_SPECIFICATION.md`, whose list predates
+  the screen existing
+
+**Target is deliberately NOT compared, and this was found on live data.** The
+first build compared every engine's live preview against its stored run, and
+August immediately reported the target engine as mismatched: live ₹0 against a
+stored ₹150,000. Neither figure is wrong. Achievement pays **once per member
+ever**, so RS4 — who won in that very month — is graduated and is no longer
+measured, and a fresh preview of a month that produced a winner reports zero
+forever. Comparing them would raise a false alarm on every month that ever had an
+achiever. The Target row now shows what the month recorded, with the count
+currently being measured and an explanation, and carries a neutral **Verdict
+recorded** badge. What the verdict actually rests on is the Team Sales figure
+above it, which *is* compared. A test pins this so it cannot regress into a false
+alarm.
+
+**Added**
+- `PeriodRecalculationService::periodStatus()` — one definition of "is this month
+  level with its sales", now shared by the single-period check and
+  `stalePeriods()`, which was rewritten to use it. Judged on Sq.Ft. against the
+  **Direct** run, because Direct is the only engine whose stored total is the
+  plain sum of the period's approved sales; the other three derive theirs through
+  the network or a threshold, so a difference there would not mean a sale went
+  missing
+- `POST /admin/calculations/rebuild` → `CalculationController@rebuild`
+
+**Tests**
+- 8 new tests (360 total, 1,204 assertions, all passing)
+- The page leads with what it is for and no longer carries the four stale claims;
+  live and stored are shown side by side and agree after a run; a sale arriving
+  without a recalculation behind it is flagged on the engine and in the month
+  list; Rebuild runs all four engines and the recorded order is Direct → Upline →
+  Team Sales → Target; Rebuild is refused once the month holds a paid reward and
+  supersedes nothing; an invalid period is rejected; a month with a target winner
+  is **not** reported as a mismatch; the five old report URLs redirect to the new
+  ones; the menu sends Upline Rewards to `/admin/rewards/upline`
+- `the_center_offers_the_wired_engines_and_marks_the_rest` was replaced rather
+  than repaired — it asserted the presence of the four "Calculate" buttons and the
+  Phase 12 markers, which is precisely what the client could not read
+
+**Manual verification**
+- Live, all three months in step: June 2,300.00, July 3,500.00, August 11,500.50
+  Sq.Ft., each matching its Direct run exactly; 0 stale periods
+- August page renders at 200 with Direct ₹460,020.00, Upline ₹287,500.01 and Team
+  Sales 11,500.50 Sq.Ft. all reading **Matches the sales**, the month reading
+  **Still running / In step with its sales**, and the target showing ₹150,000.00
+  under **Verdict recorded**
+- All five moved report pages return 200; all five old URLs return 302 to the
+  correct new address, query string preserved
+- On `/admin/rewards/upline` the sidebar now highlights **Upline Rewards** rather
+  than Calculations, and the breadcrumb reads *Rewards › Upline Reward*
+
+**Decision**
+- Reward **reports** live under `rewards/`; the Calculation Center holds only
+  engine state and the controls that rebuild it. Any new reward report belongs
+  under `rewards/` and should use `ResolvesReportFilters`
+
+**Next**
+- Phase 9 (Two Month Target) still needs the admin Settings screen first — its
+  threshold and rate are admin-configured and cannot be built against config
+  constants. Unchanged by this task
+
+---
+
 ### 2026-08-17 — Sales History brought up to the report standard
 
 **Changed**
