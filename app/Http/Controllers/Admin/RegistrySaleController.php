@@ -77,22 +77,39 @@ class RegistrySaleController extends Controller
         // and the spec asks the form to stay ready for the next one.
         $redirect = redirect()->route('admin.sales.create');
 
-        if ($recalculation['recalculated']) {
+        $period = $sale->registry_date->format('Y-m');
+
+        // Nothing moved at all — every engine in the month is frozen by a
+        // confirmed payment. The sale is recorded either way; say plainly that
+        // the figures did not move and why, rather than letting them drift out
+        // of step in silence.
+        if (! $recalculation['recalculated']) {
+            return $redirect
+                ->with('success', $message)
+                ->with('error', sprintf(
+                    'Figures for %s were NOT updated. %s',
+                    $period,
+                    $recalculation['reason'],
+                ));
+        }
+
+        if ($recalculation['reason'] === null) {
             return $redirect->with('success', $message.sprintf(
                 ' All %s figures recalculated.',
-                $sale->registry_date->format('Y-m'),
+                $period,
             ));
         }
 
-        // The sale is recorded either way. Say plainly that the figures did not
-        // move and why, rather than letting them drift out of step in silence.
+        // The partial case, which the per-engine lock made possible: most of the
+        // month absorbed the sale and one engine could not. That is neither a
+        // clean success nor a failure, and flattening it into either would hide
+        // the one engine now out of step with its sales.
         return $redirect
-            ->with('success', $message)
-            ->with('error', sprintf(
-                'Figures for %s were NOT updated. %s',
-                $sale->registry_date->format('Y-m'),
-                $recalculation['reason'],
-            ));
+            ->with('success', $message.sprintf(
+                ' %s figures recalculated, except where a payment has frozen them.',
+                $period,
+            ))
+            ->with('warning', $recalculation['reason']);
     }
 
     /**

@@ -200,6 +200,33 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Payment cut-off
+    |--------------------------------------------------------------------------
+    |
+    | CLIENT-CONFIRMED 2026-09-01. Days after a month ends before its rewards
+    | may be confirmed as paid.
+    |
+    | The month ending is not the same as every sale in it having been entered.
+    | Registry paperwork for the last days of a month arrives during the first
+    | days of the next one, and a sale keyed in AFTER payment lands against an
+    | engine the payment has locked - it can never be absorbed, so the member
+    | who made it is simply never credited.
+    |
+    | This window is what closes that gap. Late paperwork lands while the
+    | figures can still take it, automatic recalculation picks it up exactly as
+    | designed, and only then does payment open. A sale arriving after the
+    | cut-off is a genuine exception that deserves a deliberate correction
+    | rather than a silent loss.
+    |
+    | Set to 0 to restore the pre-2026-09-01 behaviour, where a month became
+    | payable at midnight on the 1st.
+    |
+    */
+
+    'payment_cutoff_days' => 5,
+
+    /*
+    |--------------------------------------------------------------------------
     | Monetary precision
     |--------------------------------------------------------------------------
     |

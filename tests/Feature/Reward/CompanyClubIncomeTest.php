@@ -141,8 +141,23 @@ class CompanyClubIncomeTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // Strip the sidebar, which legitimately links to the target screens.
-        $body = substr($html, strpos($html, 'Income Distribution'));
+        /*
+         * Scan the page's own content and nothing else.
+         *
+         * Cutting at the first "Income Distribution" used to be the way, and it
+         * cut in the <title> — leaving the whole layout in the haystack. That
+         * made the test fail whenever the random CSRF token happened to contain
+         * "L1".."L5", which it does roughly one run in twenty. <main> is the
+         * boundary the layout actually draws.
+         */
+        $body = substr(
+            $html,
+            (int) strpos($html, '<main class="app-main">'),
+            (int) strrpos($html, '</main>') - (int) strpos($html, '<main class="app-main">'),
+        );
+
+        // Every form in the content carries one too.
+        $body = preg_replace('/name="_token" value="[^"]*"/', '', $body);
 
         foreach (['L1', 'L2', 'L3', 'L4', 'L5', 'Level 1', 'Level 2', 'upline level'] as $jargon) {
             $this->assertStringNotContainsString(

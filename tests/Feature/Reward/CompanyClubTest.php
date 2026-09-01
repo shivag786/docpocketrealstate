@@ -1088,37 +1088,86 @@ class CompanyClubTest extends TestCase
     }
 
     #[Test]
-    public function a_company_club_failure_does_not_leave_the_other_engines_half_rebuilt(): void
+    public function a_paid_company_club_month_stands_still_while_the_other_engines_rebuild(): void
     {
         /*
-         * All five engines share one transaction, so a Company Club failure has
-         * to take the whole rebuild down rather than leaving fresh Direct
-         * figures beside stale Company Club ones. The cost of that choice is
-         * accepted deliberately; this pins the behaviour.
+         * Client-confirmed 2026-09-01, replacing the rule this test used to
+         * pin. A paid Company Club share once took the whole month down with
+         * it: Direct could not follow its own sales because money had gone out
+         * of an unrelated engine.
+         *
+         * The Club share is still never rewritten — that is the point of the
+         * lock and it is unchanged. What changed is that it no longer reaches
+         * across into engines nobody has been paid from.
          */
         [$shiva, $seller] = $this->chain([true, true]);
         $this->sell($seller, '1000.00');
         $this->club->calculate($this->period(), $this->admin);
 
-        $directBefore = RewardLedger::query()
-            ->ofType(RewardType::Direct)
+        $clubBefore = (string) RewardLedger::query()
+            ->ofType(RewardType::CompanyClub)
             ->sum('amount');
 
-        // Paying a reward locks the period; the rebuild must refuse entirely.
         RewardLedger::query()
             ->ofType(RewardType::CompanyClub)
             ->update(['status' => LedgerStatus::Paid]);
 
-        try {
-            app(PeriodRecalculationService::class)->recalculate($this->period(), $this->admin);
-            $this->fail('A locked period should refuse to rebuild.');
-        } catch (RuntimeException) {
-            // expected
-        }
+        // A late sale into the same month.
+        $this->sell($seller, '500.00');
 
-        $this->assertSame(
-            $directBefore,
-            RewardLedger::query()->ofType(RewardType::Direct)->sum('amount'),
-        );
+        $outcome = app(PeriodRecalculationService::class)->recalculate($this->period(), $this->admin);
+
+        // Direct followed the sale: 1,500 x 40.
+        $this->assertSame('60000.00', (string) RewardLedger::query()
+            ->ofType(RewardType::Direct)
+            ->sum('amount'));
+
+        // The paid Club share is exactly as it was, and said to be so.
+        $this->assertSame($clubBefore, (string) RewardLedger::query()
+            ->ofType(RewardType::CompanyClub)
+            ->sum('amount'));
+        $this->assertStringContainsString('Company Club', implode(' ', $outcome['locked']));
+    }
+
+    #[Test]
+    public function a_month_still_running_cannot_be_calculated(): void
+    {
+        /*
+         * Client-confirmed 2026-09-01, and unique to this engine. A Club share
+         * is the pool DIVIDED between the eligible members, so a member joining
+         * the eligible list on the 25th cuts what everybody else receives.
+         * Committing mid-month publishes an amount certain to fall.
+         *
+         * Preview is deliberately still open — it writes nothing.
+         */
+        [$shiva, $seller] = $this->chain([true, true]);
+        $current = now()->format('Y-m');
+        $this->sell($seller, '1000.00', $current);
+
+        // Preview works and shows real figures.
+        $preview = $this->club->preview($current);
+        $this->assertFalse($preview['month_is_over']);
+        $this->assertGreaterThan(0, $preview['eligible_count']);
+
+        // Committing does not.
+        $this->assertNotNull($this->club->calculationBlockedReason($current));
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('has not finished');
+
+        $this->club->calculate($current, $this->admin);
+    }
+
+    #[Test]
+    public function a_month_that_has_ended_can_be_calculated(): void
+    {
+        [$shiva, $seller] = $this->chain([true, true]);
+        $this->sell($seller, '1000.00');
+
+        $this->assertNull($this->club->calculationBlockedReason($this->period()));
+
+        $run = $this->club->calculate($this->period(), $this->admin);
+
+        $this->assertSame($this->period(), $run->period);
     }
 }

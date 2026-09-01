@@ -54,10 +54,13 @@
                                class="fw-semibold">{{ $row['period'] }}</a>
                             — sales hold {{ number_format((float) $row['live_sqft'], 2) }} Sq.Ft.,
                             the calculation counted {{ number_format((float) $row['run_sqft'], 2) }}.
-                            @if ($row['locked'])
-                                <span class="badge text-bg-dark">Locked by a payment</span>
-                                — it cannot be rebuilt, because that would rewrite an amount
-                                somebody has already been paid.
+                            @if ($row['locked_engines'] !== [])
+                                <span class="badge text-bg-dark">
+                                    {{ implode(', ', $row['locked_engines']) }} locked by a payment
+                                </span>
+                                — {{ count($row['locked_engines']) === 1 ? 'that engine' : 'those engines' }}
+                                cannot be rebuilt, because that would rewrite an amount somebody
+                                has already been paid. The rest of the month still rebuilds.
                             @endif
                         </li>
                     @endforeach
@@ -90,8 +93,10 @@
                     <div class="col-12 col-md-5">
                         <div class="small text-muted mb-1">State of {{ $period }}</div>
                         <div class="d-flex flex-wrap gap-2 align-items-center">
-                            @if ($status['locked'])
-                                <span class="badge text-bg-dark"><i class="bi bi-lock-fill me-1"></i>Locked by a payment</span>
+                            @if ($status['locked_engines'] !== [])
+                                <span class="badge text-bg-dark">
+                                    <i class="bi bi-lock-fill me-1"></i>{{ implode(', ', $status['locked_engines']) }} paid
+                                </span>
                             @elseif (! $monthIsOver)
                                 <span class="badge text-bg-info"><i class="bi bi-hourglass-split me-1"></i>Still running</span>
                             @else
@@ -107,15 +112,17 @@
                             @endif
                         </div>
                         <div class="small text-muted mt-2">
-                            @if ($status['locked'])
-                                A confirmed payment has frozen this month. Its figures can no
-                                longer be rebuilt.
+                            @if ($status['locked_engines'] !== [])
+                                A confirmed payment has frozen
+                                {{ implode(' and ', $status['locked_engines']) }} for this month.
+                                Those figures can no longer be rebuilt; every other engine still
+                                recalculates as sales arrive.
                             @elseif (! $monthIsOver)
                                 Figures are provisional and move as sales arrive. Rewards
-                                become payable once the month is over.
+                                become payable after the month ends and its entry window closes.
                             @else
-                                The month has ended, so its figures have stopped moving and
-                                its rewards can be confirmed as paid.
+                                The month has ended, so its figures have stopped moving.
+                                {{ $paymentBlockedReason ?? 'Its rewards can be confirmed as paid.' }}
                             @endif
                         </div>
                     </div>
@@ -126,14 +133,18 @@
                             <input type="hidden" name="period" value="{{ $period }}">
                             <button type="submit"
                                     class="btn btn-sm {{ $status['in_step'] ? 'btn-outline-secondary' : 'btn-primary' }}"
-                                    @disabled($status['locked'])
-                                    data-confirm-submit="Rebuild every engine for {{ $period }} from its current sales?">
+                                    @disabled($status['fully_locked'])
+                                    data-confirm-submit="Rebuild every engine for {{ $period }} that a payment has not frozen, from its current sales?">
                                 <i class="bi bi-arrow-clockwise me-1"></i>Rebuild {{ $period }}
                             </button>
                         </form>
                         <div class="form-text mt-1">
-                            @if ($status['locked'])
-                                Unavailable — the month is locked.
+                            @if ($status['fully_locked'])
+                                Unavailable — every engine in this month is paid.
+                            @elseif ($status['locked_engines'] !== [])
+                                Runs every engine except
+                                {{ implode(' and ', $status['locked_engines']) }}, which a payment
+                                has frozen.
                             @else
                                 Runs all four engines in order.
                             @endif
@@ -279,18 +290,23 @@
 
             <div class="d-flex flex-wrap gap-2">
                 @foreach (array_values(array_filter([
-                    ['Direct', 'admin.calculations.direct'],
+                    ['Direct', 'admin.calculations.direct', 'direct'],
                     // Hidden engines keep running under Rebuild; they just get
                     // no button of their own, because there is no report to
                     // check the result against.
-                    App\Enums\RewardType::Upline->isVisible() ? ['Upline', 'admin.calculations.upline'] : null,
-                    ['Team Sales', 'admin.calculations.team'],
-                ])) as [$label, $action])
+                    App\Enums\RewardType::Upline->isVisible() ? ['Upline', 'admin.calculations.upline', 'upline'] : null,
+                    ['Team Sales', 'admin.calculations.team', 'team_sales'],
+                ])) as [$label, $action, $runType])
+                    @php $engineLocked = $status && in_array($runType, $status['locked_types'], true); @endphp
+
                     <form method="POST" action="{{ route($action) }}">
                         @csrf
                         <input type="hidden" name="period" value="{{ $period }}">
                         <button type="submit" class="btn btn-sm btn-outline-secondary"
-                                @disabled($status && $status['locked'])
+                                @disabled($engineLocked)
+                                @if ($engineLocked)
+                                    title="A confirmed payment has frozen this engine for {{ $period }}."
+                                @endif
                                 data-confirm-submit="Run {{ $label }} alone for {{ $period }}, leaving the other engines as they are?">
                             {{ $label }}
                         </button>

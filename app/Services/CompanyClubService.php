@@ -15,12 +15,26 @@ use App\Models\RewardLedger;
 use App\Models\User;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 /**
  * Company Club orchestration: preview, calculate, recalculate, history.
  *
- * HOW THIS ENGINE IS DRIVEN (client-confirmed 2026-08-19).
+ * HOW THIS ENGINE IS DRIVEN (client-confirmed 2026-08-19, amended 2026-09-01).
+ *
+ * THE MONTH MUST BE OVER BEFORE IT CAN BE CALCULATED. This is the 2026-09-01
+ * amendment, and Company Club is the only engine that carries it, for a reason
+ * that belongs to this engine alone: a Club reward is a DIVISION, not an
+ * accumulation. A Direct reward only ever grows - a new sale adds a row and
+ * moves nobody else's figure. A Club share is pool / eligible members, so one
+ * new eligible member on the 25th cuts what everybody else receives. Committing
+ * that mid-month publishes an amount that is certain to fall, and a member who
+ * watched their share shrink has every reason to dispute it.
+ *
+ * Preview stays open every day of the month. It writes nothing and is labelled
+ * an estimate, which is the honest way to answer "what is it looking like".
  *
  * The FIRST calculation of a month is always explicit. An admin previews, sees
  * the pool and the recipient list, and presses Calculate. Nothing writes a
@@ -39,8 +53,13 @@ use Illuminate\Support\Facades\DB;
  * every screen show what the previous calculation said and when - the admin is
  * never left guessing which figures they are looking at.
  *
- * The paid-month lock still wins over all of it: once any reward in a period is
- * marked paid, that period refuses to recalculate at all.
+ * The paid lock still wins over all of it: once a COMPANY CLUB reward in a
+ * period is marked paid, this engine refuses to recalculate that period.
+ *
+ * That lock is Company Club's own (client-confirmed 2026-09-01). Paying a Team
+ * Target does not freeze the Club, and confirming a Club share does not freeze
+ * the Target - they are separate money, separately approved, and mixing their
+ * payment states was making one engine hostage to the other.
  */
 class CompanyClubService
 {
@@ -85,7 +104,8 @@ class CompanyClubService
             'previous_runs' => $this->history($period, 5),
             'calculated' => $lastRun !== null,
             'needs_recalculation' => $this->needsRecalculation($period),
-            'locked' => $this->runs->periodIsPaid($period),
+            'locked' => $this->runs->periodIsPaid($period, CalculationRunType::CompanyClub),
+            'month_is_over' => $this->runs->periodHasEnded($period),
             'settings' => CompanyClubSetting::current(),
         ];
     }
@@ -145,10 +165,15 @@ class CompanyClubService
     // -----------------------------------------------------------------
 
     /**
-     * First calculation of a period. Refused if one already exists.
+     * First calculation of a period. Refused if one already exists, and refused
+     * while the month is still running.
+     *
+     * @throws RuntimeException when the month has not finished
      */
     public function calculate(string $period, User $initiatedBy): CompanyClubCalculationRun
     {
+        $this->assertPeriodIsComplete($period);
+
         $run = $this->runs->execute(
             $period,
             CalculationRunType::CompanyClub,
@@ -190,7 +215,55 @@ class CompanyClubService
             return null;
         }
 
+        // A paid Club month returns null rather than throwing. This is the
+        // AUTOMATIC path, called from inside the whole-month rebuild: raising
+        // here would roll back the four engines that are perfectly free to
+        // recalculate, which is precisely the coupling the per-engine lock
+        // exists to remove. The manual `recalculate()` still throws, because
+        // there an admin pressed a button and is owed the reason.
+        if ($this->runs->periodIsPaid($period, CalculationRunType::CompanyClub)) {
+            return null;
+        }
+
         return $this->recalculate($period, $initiatedBy, true);
+    }
+
+    /**
+     * Whether the month has finished and may therefore be committed.
+     */
+    public function periodIsComplete(string $period): bool
+    {
+        return $this->runs->periodHasEnded($period);
+    }
+
+    /**
+     * Why the Calculate button is unavailable, or null when it is available.
+     *
+     * Preview is deliberately NOT gated by this - it writes nothing, and an
+     * admin watching the month build up is exactly who it is for.
+     */
+    public function calculationBlockedReason(string $period): ?string
+    {
+        if ($this->periodIsComplete($period)) {
+            return null;
+        }
+
+        return sprintf(
+            '%s has not finished. A Company Club share is the pool divided between '
+            .'the eligible members, so every sale still to come this month changes '
+            .'what each member receives. The month can be calculated from %s.',
+            $period,
+            Carbon::parse($period.'-01')->addMonth()->format('d M Y'),
+        );
+    }
+
+    private function assertPeriodIsComplete(string $period): void
+    {
+        $reason = $this->calculationBlockedReason($period);
+
+        if ($reason !== null) {
+            throw new RuntimeException($reason);
+        }
     }
 
     /**

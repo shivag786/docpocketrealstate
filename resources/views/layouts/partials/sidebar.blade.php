@@ -2,31 +2,33 @@
     /**
      * Full navigation from docs/04_UI_UX_SPECIFICATION.md.
      *
-     * Items are declared up front so the information architecture is settled.
-     * A delivered item is simply a link — it carries no phase marking, because
-     * build-order is scaffolding the operator has no use for. Only items that do
-     * not exist yet are disabled, and those say when they arrive so the menu is
-     * never a dead end. No dead links, no invented screens.
+     * Every entry here is a screen that exists, and nothing is listed before it
+     * can be opened — a menu that advertises screens nobody can reach is worse
+     * than a shorter menu. No dead links, no invented screens.
+     *
+     * There is no phase marking either. Build-order is scaffolding the operator
+     * has no use for, and with no undelivered items left there is nothing for a
+     * phase number to explain.
      */
     $sections = [
         'Overview' => [
-            ['label' => 'Dashboard', 'icon' => 'bi-speedometer2', 'route' => 'admin.dashboard', 'phase' => 1],
+            ['label' => 'Dashboard', 'icon' => 'bi-speedometer2', 'route' => 'admin.dashboard'],
         ],
         'Network' => [
-            ['label' => 'Members', 'icon' => 'bi-people', 'route' => 'admin.members.index', 'active' => 'admin.members.*', 'phase' => 2],
-            ['label' => 'Sponsor Tree', 'icon' => 'bi-diagram-3', 'route' => 'admin.tree.index', 'active' => 'admin.tree.*', 'phase' => 3],
+            ['label' => 'Members', 'icon' => 'bi-people', 'route' => 'admin.members.index', 'active' => 'admin.members.*'],
+            ['label' => 'Sponsor Tree', 'icon' => 'bi-diagram-3', 'route' => 'admin.tree.index', 'active' => 'admin.tree.*'],
         ],
         'Sales' => [
-            ['label' => 'Projects', 'icon' => 'bi-buildings', 'route' => 'admin.projects.index', 'active' => 'admin.projects.*', 'phase' => 4],
-            ['label' => 'Properties / Sites', 'icon' => 'bi-geo-alt', 'route' => 'admin.properties.index', 'active' => 'admin.properties.*', 'phase' => 4],
-            ['label' => 'Daily Sales', 'icon' => 'bi-pencil-square', 'route' => 'admin.sales.create', 'phase' => 4],
-            ['label' => 'Sales History', 'icon' => 'bi-clock-history', 'route' => 'admin.sales.index', 'active' => 'admin.sales.index', 'phase' => 4],
+            ['label' => 'Projects', 'icon' => 'bi-buildings', 'route' => 'admin.projects.index', 'active' => 'admin.projects.*'],
+            ['label' => 'Properties / Sites', 'icon' => 'bi-geo-alt', 'route' => 'admin.properties.index', 'active' => 'admin.properties.*'],
+            ['label' => 'Daily Sales', 'icon' => 'bi-pencil-square', 'route' => 'admin.sales.create'],
+            ['label' => 'Sales History', 'icon' => 'bi-clock-history', 'route' => 'admin.sales.index', 'active' => 'admin.sales.index'],
         ],
         'Rewards' => [
-            ['label' => 'Calculations', 'icon' => 'bi-calculator', 'route' => 'admin.calculations.index', 'active' => 'admin.calculations.*', 'phase' => 5],
+            ['label' => 'Calculations', 'icon' => 'bi-calculator', 'route' => 'admin.calculations.index', 'active' => 'admin.calculations.*'],
             // Matches the direct ledger too, so that page is not left with no
             // menu entry highlighted at all.
-            ['label' => 'Direct Sale', 'icon' => 'bi-cash-coin', 'route' => 'admin.rewards.direct-sales', 'active' => 'admin.rewards.direct*', 'phase' => 5],
+            ['label' => 'Direct Sale', 'icon' => 'bi-cash-coin', 'route' => 'admin.rewards.direct-sales', 'active' => 'admin.rewards.direct*'],
             // The three targets are the same two pages with a different level.
             // A member is measured against exactly one at a time, so they are
             // three separate populations and each gets its own menu entry.
@@ -35,19 +37,18 @@
                 'icon' => 'bi-bullseye',
                 'active' => 'admin.targets.*',
                 'level' => $level->value,
-                'phase' => 7 + $level->value,
                 'children' => [
-                    ['label' => 'Achieved', 'route' => 'admin.targets.achieved', 'active' => 'admin.targets.achieved', 'level' => $level->value, 'phase' => 8],
-                    ['label' => 'Not Reached', 'route' => 'admin.targets.missed', 'active' => 'admin.targets.missed', 'level' => $level->value, 'phase' => 8],
+                    ['label' => 'Achieved', 'route' => 'admin.targets.achieved', 'active' => 'admin.targets.achieved', 'level' => $level->value],
+                    ['label' => 'Not Reached', 'route' => 'admin.targets.missed', 'active' => 'admin.targets.missed', 'level' => $level->value],
                 ],
             ], App\Enums\TargetLevel::all()),
             // Upline is hidden at the client's request (2026-08-27). The engine
             // still runs and still pays; only the screens are gone. Flipping
             // rewards.visibility.upline back to true restores this entry.
             ...(App\Enums\RewardType::Upline->isVisible() ? [
-                ['label' => 'Upline Rewards', 'icon' => 'bi-arrow-up-circle', 'route' => 'admin.rewards.upline', 'active' => 'admin.rewards.upline*', 'phase' => 6],
+                ['label' => 'Upline Rewards', 'icon' => 'bi-arrow-up-circle', 'route' => 'admin.rewards.upline', 'active' => 'admin.rewards.upline*'],
             ] : []),
-            ['label' => 'Team Sales', 'icon' => 'bi-people', 'route' => 'admin.rewards.team-sales', 'active' => 'admin.rewards.team-sales*', 'phase' => 7],
+            ['label' => 'Team Sales', 'icon' => 'bi-people', 'route' => 'admin.rewards.team-sales', 'active' => 'admin.rewards.team-sales*'],
             // A separate module with its own seven screens, so it gets a
             // submenu rather than being folded into Calculations or Upline.
             [
@@ -55,7 +56,6 @@
                 'icon' => 'bi-award',
                 'route' => 'admin.company-club.overview',
                 'active' => 'admin.company-club.*',
-                'phase' => 11,
                 'children' => [
                     ['label' => 'Overview', 'route' => 'admin.company-club.overview', 'active' => 'admin.company-club.overview'],
                     ['label' => 'Network Tree', 'route' => 'admin.company-club.tree', 'active' => 'admin.company-club.tree'],
@@ -74,7 +74,6 @@
                 'icon' => 'bi-journal-text',
                 'route' => 'admin.ledger.index',
                 'active' => 'admin.ledger.*',
-                'phase' => 13,
                 'children' => [
                     ['label' => 'Complete Ledger', 'route' => 'admin.ledger.index', 'active' => 'admin.ledger.index'],
                     ['label' => 'Reconciliation', 'route' => 'admin.ledger.reconciliation', 'active' => 'admin.ledger.reconciliation'],
@@ -82,14 +81,11 @@
             ],
         ],
         'Administration' => [
-            ['label' => 'Reports', 'icon' => 'bi-file-earmark-bar-graph', 'route' => null, 'phase' => 14],
-            ['label' => 'Audit Logs', 'icon' => 'bi-shield-check', 'route' => null, 'phase' => 16],
             [
                 'label' => 'Settings',
                 'icon' => 'bi-gear',
                 'route' => 'admin.settings.edit',
                 'active' => 'admin.settings.*',
-                'phase' => 16,
                 'children' => [
                     ['label' => 'Company', 'route' => 'admin.settings.edit', 'active' => 'admin.settings.edit'],
                     ['label' => 'Welcome Letter', 'route' => 'admin.settings.letter', 'active' => 'admin.settings.letter'],
@@ -176,21 +172,13 @@
                             @endforeach
                         </div>
                     </div>
-                @elseif ($item['route'])
+                @else
                     <a href="{{ route($item['route']) }}"
                        class="nav-link {{ $isActive ? 'active' : '' }}"
                        @if ($isActive) aria-current="page" @endif>
                         <i class="bi {{ $item['icon'] }}"></i>
                         <span>{{ $item['label'] }}</span>
                     </a>
-                @else
-                    <span class="nav-link disabled"
-                          title="Delivered in Phase {{ $item['phase'] }}"
-                          aria-disabled="true">
-                        <i class="bi {{ $item['icon'] }}"></i>
-                        <span>{{ $item['label'] }}</span>
-                        <span class="badge text-bg-dark ms-auto fw-normal">P{{ $item['phase'] }}</span>
-                    </span>
                 @endif
             @endforeach
         @endforeach

@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\CompanyClubService;
 use App\Services\DirectRewardService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -30,6 +31,11 @@ class CompanyClubPagesTest extends TestCase
     {
         parent::setUp();
 
+        // The payment cut-off (config rewards.payment_cutoff_days) opens payment
+        // a few days into the next month. Without a frozen clock these tests
+        // would pass or fail depending on which day of the month they ran.
+        $this->travelTo(Carbon::parse('2026-09-20 09:00:00'));
+
         $this->admin = User::factory()->admin()->create();
         $this->club = app(CompanyClubService::class);
     }
@@ -44,7 +50,7 @@ class CompanyClubPagesTest extends TestCase
      *
      * @return array{shiva: Member, seller: Member}
      */
-    private function network(string $sqft = '1000.00'): array
+    private function network(string $sqft = '1000.00', ?string $period = null): array
     {
         $shiva = Member::factory()->root()->create(['name' => 'Shiva']);
         $seller = Member::factory()->sponsoredBy($shiva)->create(['name' => 'Seller One']);
@@ -52,7 +58,7 @@ class CompanyClubPagesTest extends TestCase
         RegistrySale::factory()
             ->forMember($seller)
             ->sqft($sqft)
-            ->inPeriod($this->period())
+            ->inPeriod($period ?? $this->period())
             ->create();
 
         return ['shiva' => $shiva, 'seller' => $seller];
@@ -187,6 +193,63 @@ class CompanyClubPagesTest extends TestCase
 
         $this->assertDatabaseCount('reward_ledger', 0);
         $this->assertDatabaseCount('company_club_calculation_runs', 0);
+    }
+
+    #[Test]
+    public function a_month_still_running_previews_but_offers_no_calculate_button(): void
+    {
+        /*
+         * Client-confirmed 2026-09-01. A Club share is the pool DIVIDED between
+         * the eligible members, so it falls when a member joins the list as
+         * well as rising when a sale lands. An amount committed on the 10th is
+         * certain to move, and a member who watched their share shrink has
+         * every reason to dispute it.
+         *
+         * Preview stays open all month, because an estimate that says it is an
+         * estimate misleads nobody.
+         */
+        $current = now()->format('Y-m');
+        $this->network('1000.00', $current);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.company-club.calculate', ['period' => $current]))
+            ->assertOk()
+            // The working is all there...
+            ->assertSee('50,000.00')
+            // ...and the commit is not.
+            ->assertSee('is still running', false)
+            ->assertSee('Available once '.$current.' ends', false)
+            ->assertDontSee('Calculate Company Club</button>', false);
+
+        $this->assertDatabaseCount('reward_ledger', 0);
+    }
+
+    #[Test]
+    public function a_month_still_running_refuses_the_calculation_even_if_the_post_is_forced(): void
+    {
+        // The disabled button is a courtesy; this is the rule.
+        $current = now()->format('Y-m');
+        $this->network('1000.00', $current);
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.company-club.run'), ['period' => $current])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseCount('company_club_calculation_runs', 0);
+        $this->assertDatabaseCount('reward_ledger', 0);
+    }
+
+    #[Test]
+    public function a_month_that_has_ended_offers_the_calculate_button(): void
+    {
+        $this->network('1000.00');
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.company-club.calculate', ['period' => $this->period()]))
+            ->assertOk()
+            ->assertSee('Calculate Company Club', false)
+            ->assertDontSee('is still running', false);
     }
 
     #[Test]

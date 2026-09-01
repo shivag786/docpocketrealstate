@@ -283,7 +283,9 @@ class TargetController extends Controller
             'payment' => $this->payments->summary($period, RewardType::Target),
             'payable' => $this->payments->periodIsPayable($period),
             'paymentBlockedReason' => $this->payments->blockedReason($period),
-            'periodLocked' => $this->runs->periodIsPaid($period),
+            // Target's own lock, not the month's. A paid Company Club share
+            // has no bearing on whether these verdicts can be rebuilt.
+            'periodLocked' => $this->runs->periodIsPaid($period, CalculationRunType::Target),
             'periods' => TargetCalculation::query()
                 ->select('period')
                 ->distinct()

@@ -47,9 +47,15 @@
                             <strong>{{ $stale['period'] }}</strong> —
                             sales hold {{ number_format((float) $stale['live_sqft'], 2) }} Sq.Ft.
                             but the calculation counted {{ number_format((float) $stale['run_sqft'], 2) }}.
-                            @if ($stale['locked'])
-                                Locked by a confirmed payment, so it will not recalculate.
+                            @if ($stale['fully_locked'])
+                                Every engine is locked by a confirmed payment, so it will not
+                                recalculate.
                             @else
+                                @if ($stale['locked_engines'] !== [])
+                                    {{ implode(' and ', $stale['locked_engines']) }}
+                                    {{ count($stale['locked_engines']) === 1 ? 'is' : 'are' }}
+                                    locked by a payment; the rest can still be brought level.
+                                @endif
                                 <a href="{{ route('admin.targets.achieved', ['period' => $stale['period']]) }}">
                                     Recalculate
                                 </a>

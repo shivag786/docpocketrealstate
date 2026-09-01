@@ -254,21 +254,20 @@ class TreeNavigationTest extends TestCase
     }
 
     #[Test]
-    public function the_profile_marks_later_phase_tabs_as_unavailable(): void
+    public function every_tab_on_the_profile_leads_somewhere(): void
     {
+        // Reward Ledger was the unbuilt example here until Phase 13 delivered
+        // it. With Reports and Audit Logs removed on 2026-09-01 there is no
+        // undelivered screen left anywhere, so the assertion is now simply that
+        // nothing is marked unavailable.
         $member = Member::factory()->create();
 
         $this->actingAs($this->admin)
             ->get(route('admin.members.show', $member))
             ->assertOk()
-            // Reward Ledger was the unbuilt example here until Phase 13
-            // delivered it; it is now a real link out to the member's statement.
             ->assertSee('Reward Ledger')
             ->assertSee(route('admin.ledger.member', $member), false)
-            ->assertDontSee('Delivered in Phase 13')
-            // Reports is the nearest unbuilt screen and keeps the rule honest:
-            // nothing undelivered is a dead end.
-            ->assertSee('Delivered in Phase 14');
+            ->assertDontSee('Delivered in Phase');
     }
 
     #[Test]

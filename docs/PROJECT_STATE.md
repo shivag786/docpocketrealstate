@@ -233,12 +233,18 @@ the Phase 4 report rule, applied here.
   `04_UI_UX_SPECIFICATION.md` has listed since Phase 1
 - `tests/Feature/Admin/DashboardAccessTest.php`,
   `tests/Feature/Tree/TreeNavigationTest.php` — the "unbuilt screens still say
-  when they arrive" tests moved from Reward Ledger to Reports (Phase 14)
+  when they arrive" tests moved from Reward Ledger to Reports (Phase 14).
+  SUPERSEDED 2026-09-01: Reports and Audit Logs were removed at the client's
+  request, they were the last two undelivered items, and the phase badges went
+  with them. Both tests now assert the stronger rule — the menu offers nothing
+  that cannot be opened.
 
 **Still open**
-1. **No void or reversal.** A paid reward cannot be undone, and a paid month
+1. **No void or reversal.** A paid reward cannot be undone, and a paid engine
    refuses to recalculate. Reconciliation reports a discrepancy; correcting one
    needs a confirmed accounting rule and is unchanged from Phase 11's open item.
+   The 2026-09-01 entry window narrows how often this can arise but does not
+   remove it: a sale entered after the cut-off still has nowhere to go.
 2. **The rounding residual is displayed, never swept.** Check 4 tolerates it
    rather than resolving it, for the same reason.
 
@@ -1086,10 +1092,12 @@ running it three times leaves one set of results, not duplicates; a target
 achievement can appear and disappear while the month is unpaid; previous runs are
 superseded rather than deleted and own no ledger rows; a reward starts unpaid; a
 month still running cannot be paid; paying records who and when; the same reward
-cannot be paid twice; a paid reward locks its whole month, freezing Direct and
-Upline with it; a sale into a locked month is still recorded with the reason
-reported; Mark All Paid; the payment summary separates paid from outstanding; a
-locked month that drifts is reported as stale while an up-to-date one is not; the
+cannot be paid twice; a paid reward locks its OWN engine and leaves the others
+free to follow their sales (2026-09-01), including the client's own case of a
+paid Company Club share not freezing Team Targets; a month that has ended still
+waits for its entry window; a sale into a partly locked month is recorded with the
+frozen engine reported; Mark All Paid; the payment summary separates paid from
+outstanding; a month that drifts names the engine that cannot follow; the
 Mark Paid button is disabled while the month runs and available once it ends; the
 screen refuses to pay a running month; guests are blocked; only target rewards are
 payable through the target screen.
@@ -1331,21 +1339,47 @@ sales entered after the run closed. Fixed, and the model changed with it.
 2. **A month is provisional until it ends.** Verdicts may appear and disappear as
    sales arrive. The screens say so.
 3. **Payment is the commit point.** Mark Paid is disabled while a month is running
-   and unlocks once it is over. Confirming a payment freezes the amount.
-4. **A paid reward locks its whole month.** Period-wide, not per reward type — the
-   four engines describe one month between them, so recalculating Team Sales after
-   a target reward was paid would move the ground the payment stood on.
+   and unlocks once it is over AND its entry window has closed. Confirming a
+   payment freezes the amount.
+4. **A paid reward locks its own engine.** SUPERSEDED 2026-09-01 — this was
+   period-wide until then, on the reasoning that the four engines describe one
+   month between them. In practice that made one engine hostage to another:
+   confirming a Company Club share stopped a Team Target, separately approved
+   money, from ever being brought level with its sales again.
+
+   Each engine now carries its own lock, declared on
+   `CalculationRunType::lockedBy()`. Team Sales is the one cross-engine entry and
+   it is the original reasoning applied honestly: it pays nobody, so it cannot be
+   locked by its own payment, but Target's verdict is read off its rollup and
+   re-running it after a Target reward was paid would move the ground that
+   payment stood on.
+
+   A rebuild is therefore PARTIAL. `PeriodRecalculationService::recalculate()`
+   returns `['completed' => …, 'locked' => …]`, and every screen that could show
+   a lock names the engine rather than the month. Nothing that has been paid is
+   ever rewritten — that protection is unchanged.
+
+   A late sale into a partly locked month is a `warning`, not an `error`: most of
+   the month absorbed it and one engine did not, and flattening that into either
+   would hide the engine now out of step.
 5. **A sale is never lost to a recalculation failure.** The sale is the fact and
    the figures are derived. Into a locked month the sale still records and the
    operator is told the figures did not move.
 6. **Superseded runs are kept.** Their results are deleted but the run rows record
    who calculated what and when. 12 exist in live data.
 
-**Assumption flagged, not separately confirmed:** "mark paid button will be
-disable default" is implemented as *disabled while the month is still running*,
-unlocking at month end — reading it together with "until month end". If a
-different gate was meant (for example, always disabled until some other approval),
-only `RewardPaymentService::periodIsPayable()` changes.
+**The payment cut-off (client-confirmed 2026-09-01).** Month end is not the same
+as every sale in the month having been entered. Registry paperwork for the last
+days of a month arrives during the first days of the next, and a sale keyed in
+AFTER payment lands against a locked engine — it can never be absorbed, so the
+member who made it is simply never credited. That was the real leak behind
+"a late sale rewriting an amount somebody has already been paid".
+
+`config('rewards.payment_cutoff_days')`, default **5**, holds payment open for a
+few days past month end so late paperwork lands while the figures can still take
+it. Set it to 0 to restore the previous behaviour, where a month became payable
+at midnight on the 1st. `RewardPaymentService::periodIsPayable()` is the only
+gate; `payableFrom()` is the date the screens show.
 
 **Not yet built:** Direct and Upline have no Mark Paid screen. Payment is wired on
 `reward_ledger` generally but surfaced only on the target pages, as asked. The

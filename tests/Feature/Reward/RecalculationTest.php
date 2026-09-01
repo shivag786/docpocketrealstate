@@ -13,9 +13,12 @@ use App\Models\RewardLedger;
 use App\Models\TargetCalculation;
 use App\Models\TeamCalculation;
 use App\Models\User;
+use App\Services\CompanyClubService;
 use App\Services\PeriodRecalculationService;
 use App\Services\RewardPaymentService;
+use App\Services\TargetRewardService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use PHPUnit\Framework\Attributes\Test;
 use RuntimeException;
 use Tests\TestCase;
@@ -26,7 +29,9 @@ use Tests\TestCase;
  * Client-confirmed 2026-08-17: "everytime all calculation will be count of each
  * sale of every day, until month end." Entering a sale rebuilds its month across
  * every engine. What stops that is payment — a confirmed reward freezes the
- * amount and locks the month.
+ * amount and locks THAT ENGINE, and only that engine (client-confirmed
+ * 2026-09-01). Company Club and Team Target are separate money with separate
+ * approval, and their payment states are never mixed.
  *
  * These tests exist because the opposite behaviour was a real defect: five
  * August sales entered after the run had left ₹256,020 of direct rewards unpaid
@@ -248,6 +253,57 @@ class RecalculationTest extends TestCase
     }
 
     #[Test]
+    public function a_month_that_has_ended_still_waits_for_its_entry_window_to_close(): void
+    {
+        /*
+         * Client-confirmed 2026-09-01. Month end is not the same as every sale
+         * in the month having been entered: registry paperwork for the last
+         * days arrives during the first days of the next month.
+         *
+         * This window is the whole fix for the problem that prompted the
+         * change — a sale keyed in after payment lands against a locked engine
+         * and can never be credited. Paying on the 1st guarantees that race;
+         * waiting a few days removes it.
+         */
+        $this->travelTo(Carbon::parse('2026-07-02 09:00:00'));
+
+        $this->assertSame(5, $this->payments->cutoffDays(), 'This test is written against the confirmed 5-day window.');
+        $this->assertFalse($this->payments->periodIsPayable(self::PERIOD));
+        $this->assertStringContainsString('entry window', $this->payments->blockedReason(self::PERIOD));
+        $this->assertSame('06 Jul 2026', $this->payments->payableFrom(self::PERIOD)->format('d M Y'));
+
+        // A sale arriving inside the window is absorbed exactly as normal —
+        // which is the point of leaving it open.
+        $member = Member::factory()->create();
+        $this->sell($member, '1000.00');
+        $this->recalc->recalculate(self::PERIOD, $this->admin);
+        $this->assertSame('40000.00', $this->directFor($member));
+
+        // On the cut-off day itself, payment opens.
+        $this->travelTo(Carbon::parse('2026-07-06 09:00:00'));
+
+        $this->assertTrue($this->payments->periodIsPayable(self::PERIOD));
+        $this->assertNull($this->payments->blockedReason(self::PERIOD));
+    }
+
+    #[Test]
+    public function the_entry_window_refuses_a_payment_rather_than_only_hiding_the_button(): void
+    {
+        $this->travelTo(Carbon::parse('2026-07-02 09:00:00'));
+
+        $member = Member::factory()->create();
+        $this->sell($member, '5000.00');
+        $this->recalc->recalculate(self::PERIOD, $this->admin);
+
+        $reward = RewardLedger::where('reward_type', RewardType::Target)->firstOrFail();
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('entry window');
+
+        $this->payments->pay($reward, $this->admin);
+    }
+
+    #[Test]
     public function marking_paid_records_who_confirmed_it_and_when(): void
     {
         $member = Member::factory()->create();
@@ -280,56 +336,102 @@ class RecalculationTest extends TestCase
     }
 
     #[Test]
-    public function a_paid_reward_locks_its_whole_month_against_recalculation(): void
+    public function a_paid_reward_locks_its_own_engine_against_recalculation(): void
     {
         $member = Member::factory()->create();
         $this->sell($member, '5000.00');
         $this->recalc->recalculate(self::PERIOD, $this->admin);
 
-        $this->payments->pay(
-            RewardLedger::where('reward_type', RewardType::Target)->firstOrFail(),
-            $this->admin
-        );
+        $paid = RewardLedger::where('reward_type', RewardType::Target)->firstOrFail();
+        $this->payments->pay($paid, $this->admin);
 
+        $amountBefore = (string) $paid->refresh()->amount;
+
+        // A later sale that would otherwise change the verdict.
+        $this->sell($member, '3000.00');
+        $outcome = $this->recalc->recalculate(self::PERIOD, $this->admin);
+
+        // Target refused, by name, and the paid amount is exactly as it was.
+        $this->assertArrayNotHasKey('target', $outcome['completed']);
+        $this->assertStringContainsString('Team Targets', implode(' ', $outcome['locked']));
+        $this->assertSame($amountBefore, (string) $paid->refresh()->amount);
+
+        // Running Target on its own still throws — an admin who asks for it
+        // directly is owed the reason rather than a silent no-op.
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('is locked');
 
-        $this->recalc->recalculate(self::PERIOD, $this->admin);
+        app(TargetRewardService::class)->recalculate(self::PERIOD, $this->admin);
     }
 
     #[Test]
-    public function paying_one_target_reward_also_freezes_direct_and_upline_for_that_month(): void
+    public function paying_a_target_reward_leaves_direct_free_to_follow_its_sales(): void
     {
-        // The lock is period-wide on purpose: the four engines describe one
-        // month between them.
+        /*
+         * Client-confirmed 2026-09-01, and the reverse of what this file
+         * asserted before. A paid Team Target used to freeze Direct, Upline and
+         * Company Club with it, so a late sale could never be credited to the
+         * member who made it — in an engine nobody had been paid from.
+         *
+         * Target money and Direct money are separate money. Each carries its own
+         * lock, and neither reaches across to the other.
+         */
         $upline = Member::factory()->create();
         $seller = Member::factory()->sponsoredBy($upline)->create();
         $this->sell($seller, '5000.00');
         $this->recalc->recalculate(self::PERIOD, $this->admin);
 
-        $directBefore = $this->directFor($seller);
+        $target = RewardLedger::where('reward_type', RewardType::Target)->firstOrFail();
+        $this->payments->pay($target, $this->admin);
 
-        $this->payments->pay(
-            RewardLedger::where('reward_type', RewardType::Target)->firstOrFail(),
-            $this->admin
-        );
+        $targetBefore = (string) $target->refresh()->amount;
 
-        // A late sale is still recorded...
+        // A late sale lands in the month.
         $this->sell($seller, '900.00');
+        $outcome = $this->recalc->recalculate(self::PERIOD, $this->admin);
 
-        try {
-            $this->recalc->recalculate(self::PERIOD, $this->admin);
-            $this->fail('A locked period must refuse to recalculate.');
-        } catch (RuntimeException $e) {
-            $this->assertStringContainsString('locked', $e->getMessage());
-        }
+        // Direct followed it: 5,900 x 40.
+        $this->assertSame('236000.00', $this->directFor($seller));
+        $this->assertArrayHasKey('direct', $outcome['completed']);
 
-        // ...and the direct figure is untouched, not silently rewritten.
-        $this->assertSame($directBefore, $this->directFor($seller));
+        // The paid Target amount did not move by a paisa.
+        $this->assertSame($targetBefore, (string) $target->refresh()->amount);
+        $this->assertStringContainsString('Team Targets', implode(' ', $outcome['locked']));
     }
 
     #[Test]
-    public function a_sale_into_a_locked_month_is_still_recorded_and_the_reason_reported(): void
+    public function paying_a_company_club_share_does_not_freeze_team_targets(): void
+    {
+        // The client's own example on 2026-09-01: Company Club payment status
+        // and Team Target payment status must never be mixed.
+        //
+        // The seller needs a sponsor: the Club pays the seller's UPLINE, so a
+        // root seller would build a pool with nobody eligible to receive it.
+        $sponsor = Member::factory()->create();
+        $member = Member::factory()->sponsoredBy($sponsor)->create();
+        $this->sell($member, '5000.00');
+        $this->recalc->recalculate(self::PERIOD, $this->admin);
+        app(CompanyClubService::class)->calculate(self::PERIOD, $this->admin);
+
+        $club = RewardLedger::where('reward_type', RewardType::CompanyClub)->firstOrFail();
+        $this->payments->pay($club, $this->admin);
+
+        $clubBefore = (string) $club->refresh()->amount;
+
+        $this->sell($member, '2000.00');
+        $outcome = $this->recalc->recalculate(self::PERIOD, $this->admin);
+
+        // Target and Direct both rebuilt against 7,000 Sq.Ft...
+        $this->assertArrayHasKey('target', $outcome['completed']);
+        $this->assertSame('280000.00', $this->directFor($member));
+
+        // ...and the paid Company Club share stayed exactly where it was.
+        $this->assertSame($clubBefore, (string) $club->refresh()->amount);
+        $this->assertStringContainsString('Company Club', implode(' ', $outcome['locked']));
+    }
+
+    #[Test]
+    public function a_sale_into_a_partly_locked_month_is_recorded_and_the_frozen_engine_reported(): void
     {
         $member = Member::factory()->create();
         $this->sell($member, '5000.00');
@@ -350,10 +452,14 @@ class RecalculationTest extends TestCase
             ->assertRedirect(route('admin.sales.create'))
             // The sale succeeded...
             ->assertSessionHas('success')
-            // ...and the operator is told the figures did NOT move.
-            ->assertSessionHas('error');
+            // ...and the operator is told which engine did NOT move. A warning
+            // rather than an error, because the rest of the month did absorb it.
+            ->assertSessionHas('warning');
 
         $this->assertSame($before + 1, RegistrySale::count(), 'The sale is never lost.');
+
+        // The unfrozen engines really did follow the sale: 5,750 x 40.
+        $this->assertSame('230000.00', $this->directFor($member));
     }
 
     #[Test]
@@ -401,7 +507,7 @@ class RecalculationTest extends TestCase
     // -----------------------------------------------------------------
 
     #[Test]
-    public function a_locked_month_that_drifts_is_reported_as_stale(): void
+    public function a_month_that_drifts_reports_which_engine_cannot_follow(): void
     {
         $member = Member::factory()->create();
         $this->sell($member, '5000.00');
@@ -422,7 +528,12 @@ class RecalculationTest extends TestCase
         $this->assertSame(self::PERIOD, $stale[0]['period']);
         $this->assertSame('5400.00', $stale[0]['live_sqft']);
         $this->assertSame('5000.00', $stale[0]['run_sqft']);
-        $this->assertTrue($stale[0]['locked']);
+
+        // Only Team Targets is frozen. Naming it is the point: reporting the
+        // whole month as locked would tell an operator that a rebuild is
+        // pointless, when in fact everything but Target would follow the sale.
+        $this->assertSame(['Team Targets'], $stale[0]['locked_engines']);
+        $this->assertFalse($stale[0]['fully_locked']);
     }
 
     #[Test]

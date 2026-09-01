@@ -31,6 +31,77 @@ Chronological project history. Claude must append an entry after each meaningful
 
 ---
 
+### 2026-09-01 — Per-engine payment locks, the Company Club month-end gate, and a payment cut-off
+
+**Changed**
+- **A paid reward now locks its OWN engine, not the whole month.** Client-confirmed
+  after they asked that Company Club payment status and Team Target payment status
+  never be mixed. The rule lives on `CalculationRunType::lockedBy()`;
+  `CalculationRunService::assertPeriodNotPaid()` and `periodIsPaid()` both take the
+  engine being asked about, and `anyRewardPaid()` is the one remaining period-wide
+  read — explicitly documented as NOT a lock.
+
+  Team Sales is the single cross-engine entry, and it is the old reasoning applied
+  honestly rather than an exception: it pays nobody, so it can never be locked by
+  its own payment, but Target's verdict is read off its rollup.
+- **A rebuild is now partial.** `PeriodRecalculationService::recalculate()` returns
+  `['completed' => …, 'locked' => …]` instead of throwing on the first paid reward.
+  The unlocked engines rebuild; the frozen ones are reported by name. Company Club's
+  automatic path returns null for a paid month rather than throwing, because raising
+  there would roll back four engines that were free to run.
+- **A late sale into a partly locked month is a warning, not an error.** Most of the
+  month absorbed it and one engine did not; calling that a failure hid the rebuild
+  that did happen, and calling it a clean success hid the engine now out of step.
+- **Company Club cannot be calculated until its month has ended.** The one engine
+  that carries this gate, for a reason belonging to it alone: a Club share is the
+  pool DIVIDED between the eligible members, so it FALLS when a member joins the
+  eligible list, not only when a sale lands. Committing on the 10th publishes an
+  amount certain to move, and a member who watched their share shrink has every
+  reason to dispute it. Preview stays open all month — it writes nothing and says
+  it is an estimate.
+- **Payment waits for an entry window past month end.** New
+  `config('rewards.payment_cutoff_days')`, default 5. Month end is not the same as
+  every sale in the month having been entered: registry paperwork for the last days
+  arrives during the first days of the next, and a sale keyed in after payment lands
+  against a locked engine and can never be credited. This is the actual fix for
+  "a late sale rewriting an amount somebody has already been paid" — it makes late
+  paperwork land BEFORE the freeze rather than after it. Set to 0 to restore the
+  previous behaviour.
+- **Reports and Audit Logs removed from the sidebar** at the client's request. They
+  were the last two undelivered items, so the disabled-item branch and every `phase`
+  key went with them — nothing in the nav is now scaffolding.
+
+**Database**
+- None. The lock was always derived from `reward_ledger.status`; only the query
+  changed.
+
+**Tests**
+- Rewrote the five tests that pinned the period-wide lock. Each now asserts the
+  engine that froze and the engines that followed their sales, including the
+  client's own case: a paid Company Club share leaves Team Targets free.
+- Added: a month still running cannot be calculated (service and screen, including a
+  forced POST); a month that has ended can; a month that has ended still waits for
+  its entry window, and a sale arriving inside the window is absorbed normally.
+- Fixed a latent flake in `CompanyClubIncomeTest::no_level_numbering_appears_anywhere_on_the_page`.
+  It cut the haystack at the first "Income Distribution", which falls in the
+  `<title>` — so the whole layout was scanned, and the test failed whenever the
+  random CSRF token happened to contain "L1".."L5". It now scans `<main>` only.
+- 670 pass.
+
+**Decision**
+- Locking per engine narrows a protection, so it was worth stating plainly what is
+  NOT weakened: an amount somebody has been paid is still never rewritten. What the
+  period-wide lock added beyond that was not protection but coupling.
+- The month-end gate deliberately does not extend to the other engines. Direct,
+  Upline and Target rewards only ever grow as sales arrive; showing one mid-month is
+  honest. Company Club is the only engine where a figure can fall.
+
+**Next**
+- Direct and Upline still have no Mark Paid screen; payment is wired on Target and
+  Company Club only.
+
+---
+
 ### 2026-08-31 — Sign-in convenience, change password, readable password storage
 
 **Added**

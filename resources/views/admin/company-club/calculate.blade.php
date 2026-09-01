@@ -37,7 +37,8 @@
                 <i class="bi bi-shield-check me-1"></i>
                 Preview reads the sales and works the money out. It writes nothing &mdash;
                 no reward ledger entry exists until you press
-                <strong>Calculate {{ $settings->name() }}</strong>.
+                <strong>Calculate {{ $settings->name() }}</strong>, and that is only
+                available once the month has ended.
             </div>
         </div>
     </div>
@@ -53,10 +54,25 @@
         @if ($preview['locked'])
             <div class="alert alert-danger">
                 <i class="bi bi-lock-fill me-1"></i>
-                <strong>{{ $period }} is locked.</strong>
-                A reward in this month has been marked paid, so its figures can no longer be
-                recalculated &mdash; that is what stops a late sale rewriting an amount somebody
-                has already been paid.
+                <strong>{{ $period }} is locked for {{ $settings->name() }}.</strong>
+                A {{ $settings->name() }} reward in this month has been marked paid, so these
+                figures can no longer be recalculated &mdash; that is what stops a late sale
+                rewriting an amount somebody has already been paid. Every other reward in
+                {{ $period }} is unaffected and still rebuilds as normal.
+            </div>
+        @endif
+
+        @if ($calculationBlockedReason)
+            <div class="alert alert-info">
+                <i class="bi bi-hourglass-split me-1"></i>
+                <strong>{{ $period }} is still running.</strong>
+                {{ $calculationBlockedReason }}
+                <div class="mt-1">
+                    Everything below is a live estimate, not a commitment. It moves with every
+                    sale entered this month &mdash; and because the pool is shared out equally,
+                    each member's amount moves when the number of eligible members moves, not
+                    only when the pool does.
+                </div>
             </div>
         @endif
 
@@ -64,7 +80,9 @@
         <div class="card mb-3" data-cc-results>
             <div class="card-header bg-white">
                 <strong>{{ $period }} preview</strong>
-                <span class="text-muted small ms-2">worked out from the sales on record right now</span>
+                <span class="text-muted small ms-2">
+                    worked out from the sales on record right now{{ $calculationBlockedReason ? ' — an estimate while the month runs' : '' }}
+                </span>
             </div>
 
             <div class="card-body">
@@ -153,6 +171,18 @@
                     <button class="btn btn-primary" disabled>
                         <i class="bi bi-lock me-1"></i>Locked by a confirmed payment
                     </button>
+                @elseif ($calculationBlockedReason && ! $preview['calculated'])
+                    {{-- Client-confirmed 2026-09-01: the month must be complete
+                         before it can be committed. A share is the pool DIVIDED
+                         between the eligible members, so committing on the 10th
+                         publishes a figure that is certain to move. --}}
+                    <button class="btn btn-primary" disabled
+                            title="{{ $calculationBlockedReason }}">
+                        <i class="bi bi-hourglass-split me-1"></i>Available once {{ $period }} ends
+                    </button>
+                    <span class="text-muted small" style="max-width: 34rem;">
+                        {{ $calculationBlockedReason }}
+                    </span>
                 @elseif (! $preview['calculated'])
                     <form method="POST" action="{{ route('admin.company-club.run') }}">
                         @csrf

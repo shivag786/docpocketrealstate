@@ -6,6 +6,7 @@ use App\Enums\LedgerStatus;
 use App\Enums\RewardType;
 use App\Models\RewardLedger;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -17,8 +18,18 @@ use RuntimeException;
  * an admin presses it and confirms does the status become paid.
  *
  * This is the point where a figure stops being provisional. Everything before it
- * is recalculated freely as sales arrive; everything after it is frozen, and the
- * whole period locks with it.
+ * is recalculated freely as sales arrive; everything after it is frozen — and
+ * ONLY that reward type freezes with it (client-confirmed 2026-09-01). Paying a
+ * Company Club share does not stop a Team Target being rebuilt, and the reverse
+ * holds too: they are separate money with separate approval, and the lock they
+ * each carry is their own. See CalculationRunType::lockedBy().
+ *
+ * A CUT-OFF SITS BETWEEN MONTH END AND PAYMENT (client-confirmed 2026-09-01).
+ * The month ending is not the same as every sale in it having been entered —
+ * registry paperwork arrives days late, and a sale keyed in after payment lands
+ * against a locked engine and can never be absorbed. Those few days are what
+ * turn "a late sale is lost" into "a late sale still counts", and they cost
+ * nothing: nobody was being paid on the 1st anyway.
  */
 class RewardPaymentService
 {
@@ -29,13 +40,50 @@ class RewardPaymentService
     /**
      * Whether a period's rewards may be paid yet.
      *
-     * A month still in progress will keep changing — "until month end" — so
-     * paying from it would be confirming a figure that has not finished moving.
-     * The current month is therefore closed to payment until it ends.
+     * Two gates, and they are not the same gate:
+     *
+     *  1. The month must have ENDED. A month still in progress keeps changing —
+     *     "until month end" — so paying from it would confirm a figure that has
+     *     not finished moving.
+     *  2. The cut-off must have PASSED. The last days of a month are still being
+     *     keyed in on the first days of the next one, and a sale entered after
+     *     payment hits a locked engine and is lost for good. The cut-off is the
+     *     window that lets that paperwork land while the figures can still
+     *     absorb it.
      */
     public function periodIsPayable(string $period): bool
     {
-        return $period < now()->format('Y-m');
+        if (! $this->runs->periodHasEnded($period)) {
+            return false;
+        }
+
+        return now()->startOfDay()->greaterThanOrEqualTo($this->payableFrom($period));
+    }
+
+    /**
+     * The first day a period's rewards may be confirmed as paid.
+     *
+     * Month end plus the cut-off. A cut-off of 0 means the 1st of the next
+     * month, which is the pre-2026-09-01 behaviour and still configurable.
+     */
+    public function payableFrom(string $period): CarbonImmutable
+    {
+        return CarbonImmutable::parse($period.'-01')
+            ->addMonth()
+            ->startOfDay()
+            ->addDays($this->cutoffDays());
+    }
+
+    /**
+     * How many days after month end payment opens.
+     *
+     * Clamped at zero: a negative cut-off would let a month be paid before it
+     * had ended, which gate 1 forbids anyway, and reading as if it might is
+     * worse than refusing the setting.
+     */
+    public function cutoffDays(): int
+    {
+        return max(0, (int) config('rewards.payment_cutoff_days', 0));
     }
 
     /**
@@ -43,15 +91,30 @@ class RewardPaymentService
      */
     public function blockedReason(string $period): ?string
     {
-        if (! $this->periodIsPayable($period)) {
+        if ($this->periodIsPayable($period)) {
+            return null;
+        }
+
+        $from = $this->payableFrom($period)->format('d M Y');
+
+        if (! $this->runs->periodHasEnded($period)) {
             return sprintf(
                 '%s has not finished. Figures keep changing as sales are entered, '
-                .'so rewards can be paid once the month is over.',
+                .'so rewards can be paid from %s.',
                 $period,
+                $from,
             );
         }
 
-        return null;
+        return sprintf(
+            '%s has ended, but its %s-day entry window is still open until %s. '
+            .'Sales from the last days of the month are often keyed in late, and '
+            .'one entered after payment can no longer be absorbed — the figures '
+            .'would be frozen against it.',
+            $period,
+            $this->cutoffDays(),
+            $from,
+        );
     }
 
     /**

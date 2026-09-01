@@ -145,19 +145,24 @@ class DashboardAccessTest extends TestCase
     }
 
     #[Test]
-    public function screens_that_do_not_exist_yet_still_say_when_they_arrive(): void
+    public function the_menu_offers_nothing_that_cannot_be_opened(): void
     {
-        // The counterpart to the test above: hiding the phase on a delivered
-        // feature must not turn an unbuilt menu item into a dead end.
-        //
-        // This has pointed at Company Club (Phase 11) and then Reward Ledger
-        // (Phase 13) as each was delivered. Reports is now the nearest unbuilt
-        // screen and takes over the job of proving the rule still holds.
+        /*
+         * This test used to guard the opposite rule: unbuilt items were listed
+         * greyed out with the phase they were coming in, so the menu was never
+         * a dead end. Reports and Audit Logs were the last two, removed at the
+         * client's request on 2026-09-01, and with them went the phase badges.
+         *
+         * The rule it enforces now is the stronger one. Every entry is a live
+         * link, so there is nothing to explain away.
+         */
         $this->actingAs(User::factory()->admin()->create())
             ->get(route('admin.dashboard'))
             ->assertOk()
-            ->assertSee('Reports')
-            ->assertSee('Delivered in Phase 14', false);
+            ->assertDontSee('Delivered in Phase', false)
+            ->assertDontSee('nav-link disabled', false)
+            ->assertDontSee('Reports')
+            ->assertDontSee('Audit Logs');
     }
 
     #[Test]

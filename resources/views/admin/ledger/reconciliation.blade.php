@@ -70,9 +70,16 @@
             <strong>{{ $period }}'s stored figures are behind its sales.</strong>
             Approved sales stand at {{ number_format((float) $periodStatus['live_sqft'], 2) }} Sq.Ft. but the
             last Direct run recorded {{ number_format((float) $periodStatus['run_sqft'], 2) }}.
-            @if ($periodStatus['locked'])
-                The month is locked by a confirmed payment, so it cannot be rebuilt.
+            @if ($periodStatus['fully_locked'])
+                Every engine in the month is locked by a confirmed payment, so it cannot be
+                rebuilt.
             @else
+                @if ($periodStatus['locked_engines'] !== [])
+                    {{ implode(' and ', $periodStatus['locked_engines']) }}
+                    {{ count($periodStatus['locked_engines']) === 1 ? 'is' : 'are' }} locked by a
+                    confirmed payment and will stay as {{ count($periodStatus['locked_engines']) === 1 ? 'it is' : 'they are' }};
+                    the rest can be brought level.
+                @endif
                 <a href="{{ route('admin.calculations.index', ['period' => $period]) }}">
                     Rebuild it from the Calculation Center</a>.
             @endif

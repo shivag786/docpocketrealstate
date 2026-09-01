@@ -268,8 +268,17 @@ class CalculationCenterTest extends TestCase
     }
 
     #[Test]
-    public function rebuilding_is_refused_once_the_month_holds_a_paid_reward(): void
+    public function rebuilding_leaves_a_paid_engine_alone_and_runs_the_rest(): void
     {
+        /*
+         * Client-confirmed 2026-09-01. This test asserted the opposite until
+         * then: one paid reward refused the entire rebuild, which meant a paid
+         * Direct reward stopped Team Targets — separately approved money — from
+         * ever being brought level with their sales again.
+         *
+         * Now the paid engine alone stands still, and the operator is told so
+         * through a warning rather than having to count runs to notice.
+         */
         $member = Member::factory()->create();
         $this->seedSale('2026-06', '1000.00', $member);
 
@@ -283,11 +292,20 @@ class CalculationCenterTest extends TestCase
         $this->actingAs($this->admin)
             ->post(route('admin.calculations.rebuild'), ['period' => '2026-06'])
             ->assertRedirect()
-            ->assertSessionHas('error');
+            ->assertSessionHas('success')
+            ->assertSessionHas('warning');
 
-        // Nothing was superseded: the paid figure still stands.
+        // The paid Direct run is untouched: still the live one, never superseded.
         $this->assertSame(1, CalculationRun::query()
             ->where('period', '2026-06')
+            ->where('run_type', CalculationRunType::Direct)
+            ->where('status', CalculationRunStatus::Completed)
+            ->count());
+
+        // ...while the engines nobody was paid from did run.
+        $this->assertSame(1, CalculationRun::query()
+            ->where('period', '2026-06')
+            ->where('run_type', CalculationRunType::Target)
             ->where('status', CalculationRunStatus::Completed)
             ->count());
     }

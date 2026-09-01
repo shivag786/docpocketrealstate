@@ -61,7 +61,6 @@ class CompanyClubController extends Controller
 
         return view('admin.company-club.overview', $this->reports->overview($period) + [
             'periods' => $this->reports->calculatedPeriods(),
-            'monthIsOver' => $this->payments->periodIsPayable($period),
         ]);
     }
 
@@ -143,6 +142,9 @@ class CompanyClubController extends Controller
             'previewError' => $error,
             'settings' => $this->club->settings(),
             'periods' => $this->reports->calculatedPeriods(),
+            // Preview is open all month; committing is not. The reason is
+            // rendered rather than the button silently vanishing.
+            'calculationBlockedReason' => $this->club->calculationBlockedReason($period),
         ]);
     }
 

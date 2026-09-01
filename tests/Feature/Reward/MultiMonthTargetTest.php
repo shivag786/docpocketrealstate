@@ -10,6 +10,7 @@ use App\Models\Member;
 use App\Models\RegistrySale;
 use App\Models\RewardLedger;
 use App\Models\TargetCalculation;
+use App\Models\TeamCalculation;
 use App\Models\User;
 use App\Services\PeriodRecalculationService;
 use App\Services\TargetRewardService;
@@ -370,8 +371,17 @@ class MultiMonthTargetTest extends TestCase
     }
 
     #[Test]
-    public function the_cascade_is_refused_when_a_later_month_holds_a_paid_reward(): void
+    public function a_later_month_that_has_been_paid_drops_out_of_the_cascade_and_is_reported(): void
     {
+        /*
+         * Until 2026-09-01 this refused the whole rebuild: a paid February
+         * meant January could not be brought level with its own sales either.
+         *
+         * February's paid verdict is still never rewritten — that has not
+         * changed and must not. What changed is that January now rebuilds, and
+         * February's exclusion is returned rather than thrown, because refusing
+         * January fixes nothing and loses the sale that prompted it.
+         */
         $member = Member::factory()->create();
 
         $this->sell($member, '5000.00', '2026-01');    // Target 1
@@ -385,12 +395,25 @@ class MultiMonthTargetTest extends TestCase
 
         $this->assertSame(1, $paid, 'February must hold the Target 2 reward for this test to mean anything.');
 
+        $februaryBefore = TargetCalculation::query()->where('period', '2026-02')->sum('reward_amount');
+
         $this->sell($member, '1000.00', '2026-01');
 
-        // Rebuilding January would move February, which has been paid. Refused outright
-        // rather than half-applied.
-        $this->expectException(RuntimeException::class);
-        app(PeriodRecalculationService::class)->recalculate('2026-01', $this->admin);
+        $outcome = app(PeriodRecalculationService::class)->recalculate('2026-01', $this->admin);
+
+        // January followed its sales...
+        $this->assertArrayHasKey('target', $outcome['completed']);
+        $this->assertSame('6000.00', (string) TeamCalculation::query()
+            ->where('period', '2026-01')
+            ->value('total_team_sqft'));
+
+        // ...February did not move, and the operator is told which month and why.
+        $this->assertSame(
+            $februaryBefore,
+            TargetCalculation::query()->where('period', '2026-02')->sum('reward_amount'),
+        );
+        $this->assertNotEmpty($outcome['locked']);
+        $this->assertStringContainsString('2026-02', implode(' ', $outcome['locked']));
     }
 
     #[Test]

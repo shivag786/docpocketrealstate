@@ -72,8 +72,8 @@
         <div class="small flex-grow-1">
             <strong>{{ $period }} has not been calculated yet.</strong>
             Nothing has been written to the reward ledger for this month. Preview it first,
-            then commit the calculation &mdash; the first run for a month is always an
-            explicit decision.
+            then commit the calculation once the month has ended &mdash; the first run for a
+            month is always an explicit decision, taken on a complete month.
         </div>
         <a href="{{ route('admin.company-club.calculate', ['period' => $period]) }}"
            class="btn btn-sm btn-primary text-nowrap">

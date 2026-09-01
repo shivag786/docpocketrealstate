@@ -76,7 +76,11 @@ class CalculationController extends Controller
             'engines' => $engines,
             'previewError' => $error,
             'status' => $status,
-            'monthIsOver' => $this->payments->periodIsPayable($period),
+            // Month over is no longer the same as payable — the entry window
+            // sits between them. The screen needs both, or it would call a
+            // finished month "still running" for the length of the window.
+            'monthIsOver' => $this->runs->periodHasEnded($period),
+            'paymentBlockedReason' => $this->payments->blockedReason($period),
             'stale' => $this->recalculation->stalePeriods(),
             // A hidden engine's runs are omitted here too, so that
             // "hidden" means one thing everywhere: RECONCILIATION IS THE ONLY
@@ -245,21 +249,35 @@ class CalculationController extends Controller
         ]);
 
         try {
-            $completed = $this->recalculation->recalculate($validated['period'], $request->user());
+            $outcome = $this->recalculation->recalculate($validated['period'], $request->user());
         } catch (Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
 
         $status = $this->recalculation->periodStatus($validated['period']);
 
-        return redirect()
-            ->route('admin.calculations.index', ['period' => $validated['period']])
-            ->with('success', sprintf(
-                '%s rebuilt: %d engines re-run against %s Sq.Ft. of approved sales.',
-                $validated['period'],
-                count($completed),
-                number_format((float) $status['live_sqft'], 2),
-            ));
+        $redirect = redirect()
+            ->route('admin.calculations.index', ['period' => $validated['period']]);
+
+        // Nothing ran at all: every engine in the month is frozen. That is a
+        // finished month, not a rebuild, and calling it a success would be a lie.
+        if ($outcome['completed'] === []) {
+            return $redirect->with('error', implode(' ', $outcome['locked']));
+        }
+
+        $message = sprintf(
+            '%s rebuilt: %d engines re-run against %s Sq.Ft. of approved sales.',
+            $validated['period'],
+            count($outcome['completed']),
+            number_format((float) $status['live_sqft'], 2),
+        );
+
+        // A partial rebuild is reported as a warning, never folded into the
+        // success line. An operator must not have to count engines to notice
+        // that one of them did not move.
+        return $outcome['locked'] === []
+            ? $redirect->with('success', $message)
+            : $redirect->with('success', $message)->with('warning', implode(' ', $outcome['locked']));
     }
 
     public function direct(Request $request): RedirectResponse
